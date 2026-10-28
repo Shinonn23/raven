@@ -1,3 +1,5 @@
+import json
+
 import frappe
 from frappe import _
 from frappe.model.document import Document
@@ -23,7 +25,9 @@ class RavenAIPendingAction(Document):
 	def run(self):
 		frappe.db.savepoint(SAVEPOINT)
 		try:
-			self.result = ApprovedAction(self).run()
+			approved = ApprovedAction(self)
+			self.result = approved.run()
+			self.names = json.dumps(approved.names)
 			self.status = "Approved"
 		except Exception as error:
 			frappe.db.rollback(save_point=SAVEPOINT)

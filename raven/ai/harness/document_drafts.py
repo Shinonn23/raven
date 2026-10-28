@@ -1,5 +1,5 @@
-"""Prepares documents for the user as the user: check them the way saving would (without saving), save them as drafts, or
-build a link to the real form with the values filled in. Nothing here submits, cancels or deletes: that needs the user's approval."""
+"""Prepares documents for the user as the user: check them the way saving would (without saving), or build a link to the real
+form with the values filled in. Nothing here changes data: every change needs the user's approval."""
 
 from urllib.parse import quote, urlencode
 
@@ -56,12 +56,6 @@ class DocumentDraft:
 		document.flags.in_insert = not exists
 		document.run_before_save_methods()
 		document._validate()
-
-	def save(self, doctype: str, values: dict, name: str | None = None) -> dict:
-		"""Save a draft (new, or a change to an existing draft)."""
-		document = self.load(doctype, values, name)
-		document.save() if name else document.insert()
-		return {"name": document.name, "link": self.form_path(doctype, document.name)}
 
 	def prefilled_link(self, doctype: str, values: dict) -> dict:
 		"""A link that opens the real new-document form with these simple values filled in, for the user to finish."""

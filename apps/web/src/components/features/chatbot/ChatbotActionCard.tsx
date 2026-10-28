@@ -21,7 +21,7 @@ interface ChatbotActionCardProps {
 
 /** A change the AI wants to make but may not make alone. The user answers here; the card then stays, with the outcome. */
 export const ChatbotActionCard = ({ chatId, action }: ChatbotActionCardProps) => {
-    const { decide, loading } = useDecideChatbotAction(chatId)
+    const { decide, busy } = useDecideChatbotAction(chatId)
     const names: string[] = JSON.parse(action.names)
     const outcome = action.status === "Pending" ? null : OUTCOMES[action.status]
 
@@ -32,14 +32,14 @@ export const ChatbotActionCard = ({ chatId, action }: ChatbotActionCardProps) =>
                 <span className="flex-1">{_("{0} {1}", [action.action, action.reference_doctype])}</span>
                 {outcome && <Badge variant="subtle" theme={outcome.theme}>{_(outcome.label)}</Badge>}
             </div>
-            {action.summary && <p className="text-p-sm text-ink-gray-7">{action.summary}</p>}
+            {action.summary && <p className="whitespace-pre-line text-p-sm text-ink-gray-7">{action.summary}</p>}
             {names.slice(0, PREVIEWED_DOCUMENTS).map((name) => <DocumentLinkRenderer key={name} doctype={action.reference_doctype} docname={name} />)}
             {names.length > PREVIEWED_DOCUMENTS && <p className="text-xs text-ink-gray-5">{_("and {0} more", [String(names.length - PREVIEWED_DOCUMENTS)])}</p>}
             {action.status === "Failed" && action.result && <p className="text-p-sm text-ink-red-3">{action.result}</p>}
             {!outcome && (
                 <div className="flex gap-2">
-                    <Button size="sm" disabled={loading} onClick={() => decide(action.name, true)}>{_("Approve")}</Button>
-                    <Button size="sm" variant="outline" disabled={loading} onClick={() => decide(action.name, false)}>{_("Reject")}</Button>
+                    <Button size="sm" disabled={busy} onClick={() => decide(action.name, true)}>{_("Approve")}</Button>
+                    <Button size="sm" variant="outline" disabled={busy} onClick={() => decide(action.name, false)}>{_("Reject")}</Button>
                 </div>
             )}
         </div>

@@ -11,7 +11,6 @@ from raven.ai.chatbot_stream import DATA_TOOL_NAME, specialist_tools
 from raven.ai.harness.action_log_hooks import ActionLogHooks
 from raven.ai.chatbot_stream import progress_reporter
 from raven.ai.harness.progress import harness_status
-from raven.ai.harness.document_cards import without_card_links
 from raven.ai.harness.document_drafts import DocumentDraft
 from raven.ai.harness.document_tools import document_tools, request_approval
 from raven.api.chatbot import get_chat
@@ -133,16 +132,6 @@ class TestDocuments(IntegrationTestCase):
 		self.assertEqual(result["document"]["priority"], "Medium")
 		self.assertFalse(frappe.db.exists("ToDo", {"description": "Call the supplier"}))
 
-	def test_save_creates_and_updates_a_draft(self):
-		saved = self.drafts.save("ToDo", {"description": "First"})
-		self.assertTrue(saved["link"].startswith("/app/todo/"))
-		self.drafts.save("ToDo", {"description": "Second"}, saved["name"])
-		self.assertEqual(frappe.db.get_value("ToDo", saved["name"], "description"), "Second")
-
-	def test_protected_fields_cannot_be_set(self):
-		saved = self.drafts.save("ToDo", {"description": "Mine", "owner": "someone@example.com", "docstatus": 1})
-		self.assertEqual(frappe.db.get_value("ToDo", saved["name"], ["owner", "docstatus"]), ("Administrator", 0))
-
 	def test_prefilled_link_carries_simple_values_only(self):
 		link = self.drafts.prefilled_link("ToDo", {"description": "A b", "children": [1]})["link"]
 		self.assertEqual(link, "/app/todo/new?description=A%20b")
@@ -159,7 +148,7 @@ class TestDocuments(IntegrationTestCase):
 
 	def test_approving_delete_and_bulk_update_do_the_work(self):
 		first, second = self.todo(), self.todo()
-		self.ask("Update many", [first.name, second.name], {"priority": "High", "owner": "x@example.com"}).decide(True)
+		self.ask("Update", [first.name, second.name], {"priority": "High", "owner": "x@example.com"}).decide(True)
 		self.assertEqual(frappe.db.get_value("ToDo", first.name, ["priority", "owner"]), ("High", "Administrator"))
 		card = self.ask("Delete", [first.name])
 		card.decide(True)
@@ -214,7 +203,7 @@ class TestProgressLines(IntegrationTestCase):
 
 	def test_each_tool_has_a_line_and_unknown_ones_none(self):
 		args = json.dumps({"doctype": "ToDo", "action": "Delete", "report_name": "Accounts Receivable", "name": "T1"})
-		for tool in ("describe_doctype", "get_document", "run_report", "preview_document", "save_draft", "open_prefilled_form", "submit_document", "cancel_document", "delete_documents", "update_documents"):
+		for tool in ("describe_doctype", "get_document", "run_report", "preview_document", "create_document", "open_prefilled_form", "submit_document", "cancel_document", "delete_documents", "update_documents"):
 			self.assertTrue(harness_status(tool, args), tool)
 		self.assertEqual(harness_status("delete_documents", args), "Asking you to approve: Delete ToDo")
 		self.assertIsNone(harness_status("something_else", args))
@@ -223,11 +212,11 @@ class TestProgressLines(IntegrationTestCase):
 	def test_the_reporter_reads_the_dict_events_the_sdk_sends(self):
 		lines = []
 		publisher = SimpleNamespace(status=lines.append)
-		raw = SimpleNamespace(name="save_draft", arguments=json.dumps({"doctype": "ToDo"}))
+		raw = SimpleNamespace(name="create_document", arguments=json.dumps({"doctype": "ToDo"}))
 		event = {"event": SimpleNamespace(type="run_item_stream_event", item=SimpleNamespace(type="tool_call_item", raw_item=raw)), "agent": None}
 		asyncio.run(progress_reporter(publisher)(event))
 		asyncio.run(progress_reporter(publisher)({"event": SimpleNamespace(type="raw_response_event"), "agent": None}))
-		self.assertEqual(lines, ["Saving a draft of ToDo…"])
+		self.assertEqual(lines, ["Asking you to approve: Create ToDo"])
 
 
 class TestHeldByTheHarness(IntegrationTestCase):
@@ -237,10 +226,9 @@ class TestHeldByTheHarness(IntegrationTestCase):
 		frappe.set_user("Administrator")
 		self.chat = frappe.get_doc({"doctype": "Raven Chatbot Chat", "title": "Held"}).insert()
 		self.todo = frappe.get_doc({"doctype": "ToDo", "description": "Keep me"}).insert()
-		self.shown = []
 
 	def call(self, name, **arguments):
-		tool = next(tool for tool in document_tools(self.chat.name, self.shown) if tool.name == name)
+		tool = next(tool for tool in document_tools(self.chat.name) if tool.name == name)
 		text = json.dumps(arguments)
 		return asyncio.run(tool.on_invoke_tool(ToolContext(context=None, tool_name=name, tool_call_id="call", tool_arguments=text), text))
 
@@ -252,29 +240,31 @@ class TestHeldByTheHarness(IntegrationTestCase):
 			self.assertFalse(json.loads(self.call(name, **arguments))["done"])
 		self.assertEqual(frappe.db.get_value("ToDo", self.todo.name, "priority"), "Medium")
 		cards = get_chat(self.chat.name)["actions"]
-		self.assertEqual([(card["action"], card["summary"]) for card in cards], [("Delete", ""), ("Update many", "priority = High")])
+		self.assertEqual([(card["action"], card["summary"]) for card in cards], [("Delete", ""), ("Update", "Priority: High")])
 
 	def test_the_card_text_comes_from_the_real_values(self):
 		self.call("update_documents", doctype="ToDo", names=[self.todo.name], values={"priority": "High", "owner": "x@example.com"})
-		self.assertEqual(get_chat(self.chat.name)["actions"][0]["summary"], "priority = High")
+		self.assertEqual(get_chat(self.chat.name)["actions"][0]["summary"], "Priority: High")
 
-	def test_a_saved_draft_is_collected_to_be_shown_as_a_card(self):
-		result = json.loads(self.call("save_draft", doctype="ToDo", values={"description": "Card me"}))
-		self.assertNotIn("link", result)
-		self.assertEqual(self.shown, [{"doctype": "ToDo", "docname": result["name"]}])
+	def test_people_are_shown_by_name(self):
+		self.call("update_documents", doctype="ToDo", names=[self.todo.name], values={"allocated_to": "Administrator"})
+		self.assertEqual(get_chat(self.chat.name)["actions"][0]["summary"], f"Allocated To: {frappe.utils.get_fullname('Administrator')}")
 
+	def test_create_checks_first_and_only_makes_a_card(self):
+		before = frappe.db.count("ToDo")
+		self.assertFalse(json.loads(self.call("create_document", doctype="ToDo", values={"description": "New one"}))["done"])
+		self.assertEqual(frappe.db.count("ToDo"), before)
+		self.assertEqual([card["action"] for card in get_chat(self.chat.name)["actions"]], ["Create"])
 
-class TestCardLinks(IntegrationTestCase):
-	DOCUMENTS = [{"doctype": "ToDo", "docname": "854mjnp51j"}]
+	def test_an_invalid_new_document_gets_no_card_and_the_problem_goes_back_to_the_ai(self):
+		result = json.loads(self.call("create_document", doctype="ToDo", values={"description": "x", "reference_type": "No Such DocType", "reference_name": "y"}))
+		self.assertTrue(result["problems"])
+		self.assertEqual(get_chat(self.chat.name)["actions"], [])
 
-	def test_links_to_a_shown_document_are_removed_with_their_empty_line(self):
-		answer = "Created the draft.\n[Open ToDo](/app/todo/854mjnp51j)\nDone."
-		self.assertEqual(without_card_links(answer, self.DOCUMENTS), "Created the draft.\nDone.")
-
-	def test_a_link_inside_a_sentence_keeps_the_sentence(self):
-		answer = "See [the draft](https://erp.example.com/desk/todo/854mjnp51j) for details."
-		self.assertEqual(without_card_links(answer, self.DOCUMENTS), "See  for details.")
-
-	def test_other_links_stay(self):
-		answer = "[Manual](https://manual.example.com/page)\n[Other](/app/todo/zzz)"
-		self.assertEqual(without_card_links(answer, self.DOCUMENTS), answer)
+	def test_approving_create_makes_the_draft_and_the_card_points_at_it(self):
+		self.call("create_document", doctype="ToDo", values={"description": "Made on approval"})
+		card = frappe.get_last_doc("Raven AI Pending Action")
+		card.decide(True)
+		name = json.loads(card.names)[0]
+		self.assertEqual(frappe.db.get_value("ToDo", name, ["description", "docstatus"]), ("Made on approval", 0))
+		self.assertEqual(json.loads(get_chat(self.chat.name)["actions"][0]["names"]), [name])

@@ -20,7 +20,7 @@ def harness_status(tool_name: str, arguments: str) -> str | None:
 		"get_document": lambda: _("Reading {0} {1}").format(doctype, args.get("name", "")),
 		"run_report": lambda: _("Running report: {0}").format(args.get("report_name", "")),
 		"preview_document": lambda: _("Checking the {0} before saving…").format(doctype),
-		"save_draft": lambda: _("Saving a draft of {0}…").format(doctype),
+		"create_document": lambda: _("Asking you to approve: Create {0}").format(doctype),
 		"open_prefilled_form": lambda: _("Preparing a {0} form…").format(doctype),
 		"submit_document": lambda: _("Asking you to approve: Submit {0}").format(doctype),
 		"cancel_document": lambda: _("Asking you to approve: Cancel {0}").format(doctype),

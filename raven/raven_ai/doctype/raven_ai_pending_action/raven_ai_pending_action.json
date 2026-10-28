@@ -33,7 +33,7 @@
    "fieldname": "action",
    "fieldtype": "Select",
    "label": "Action",
-   "options": "Submit\nCancel\nDelete\nUpdate many",
+   "options": "Create\nUpdate\nSubmit\nCancel\nDelete",
    "in_list_view": 1,
    "reqd": 1,
    "read_only": 1
@@ -52,7 +52,6 @@
    "fieldtype": "Code",
    "label": "Documents",
    "options": "JSON",
-   "reqd": 1,
    "read_only": 1
   },
   {

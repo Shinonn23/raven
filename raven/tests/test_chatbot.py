@@ -178,18 +178,6 @@ class TestChatbotAttachmentsAndSkills(TestChatbot):
 		recommended = get_recommended_documents()
 		self.assertEqual((recommended[0]["docname"], recommended[0]["use_count"]), (note.name, 2))
 
-	def test_documents_saved_by_the_ai_stay_on_its_answer(self):
-		def answer_with_a_draft(prompt, history, publisher, choice):
-			publisher.documents.append({"doctype": "Note", "docname": "Made by AI"})
-			return "Done"
-
-		with patch(STREAM, side_effect=answer_with_a_draft), patch("frappe.enqueue", side_effect=run_now):
-			chat = send_message("make a note")
-
-		saved = get_chat(chat["name"])["messages"]
-		self.assertEqual(saved[-1]["documents"], [{"doctype": "Note", "docname": "Made by AI"}])
-		self.assertEqual(saved[0]["documents"], [])
-
 	def test_a_document_alone_can_be_sent_without_a_message(self):
 		note = self.make_note()
 		with bot_answers() as ask_agent:

@@ -62,20 +62,22 @@ export const useChatbotShares = (chatId: string, enabled: boolean) => {
     }
 }
 
-/** Approve or reject a card the AI asked for; the chat is reloaded so the card goes away and the outcome shows. */
+/** Approve or reject a card the AI asked for. The chat is reloaded so the card shows its outcome; until then the buttons stay off. */
 export const useDecideChatbotAction = (chatId: string) => {
-    const { call, loading } = useFrappePostCall<{ message: { status: string; result: string | null } }>("raven.api.chatbot.decide_action")
+    const { call } = useFrappePostCall<{ message: { status: string; result: string | null } }>("raven.api.chatbot.decide_action")
     const { mutate } = useSWRConfig()
+    const [busy, setBusy] = useState(false)
 
     const decide = async (action: string, approve: boolean) => {
+        setBusy(true)
         try {
-            const { message } = await call({ action, approve })
-            if (message.status === "Failed") errorResponseToast(_("The change was not made"), { message: message.result } as never)
+            await call({ action, approve })
         } catch (error) {
             errorResponseToast(_("Could not record your answer"), error as never)
         }
         await mutate(chatKey(chatId))
+        setBusy(false)
     }
 
-    return { decide, loading }
+    return { decide, busy }
 }

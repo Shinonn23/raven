@@ -1,4 +1,4 @@
-"""What happens when the user approves a card: Submit, Cancel, Delete or Update many on the listed documents. Every step is
+"""What happens when the user approves a card: Create a document, or Update, Submit, Cancel or Delete the listed ones. Every step is
 checked against the user's own permissions again at that moment, whatever was checked when the AI asked."""
 
 import json
@@ -25,12 +25,20 @@ class ApprovedAction:
 		self.action = request.action
 
 	def run(self) -> str:
+		if self.action == "Create":
+			return self.create()
 		if len(self.names) > MAX_DOCUMENTS:
 			frappe.throw(_("At most {0} documents at a time.").format(MAX_DOCUMENTS))
-		change = {"Submit": self.submit, "Cancel": self.cancel, "Delete": self.delete, "Update many": self.update}[self.action]
+		change = {"Submit": self.submit, "Cancel": self.cancel, "Delete": self.delete, "Update": self.update}[self.action]
 		for name in self.names:
 			change(name)
 		return _("{0} {1} done.").format(len(self.names), self.doctype)
+
+	def create(self) -> str:
+		"""A new draft; the card then shows it, because `names` becomes the new document."""
+		document = frappe.get_doc({"doctype": self.doctype, **self.values}).insert()
+		self.names = [document.name]
+		return _("{0} {1} created.").format(self.doctype, document.name)
 
 	def document(self, name: str, permission: str):
 		document = frappe.get_doc(self.doctype, name)

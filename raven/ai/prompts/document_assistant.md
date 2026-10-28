@@ -10,8 +10,8 @@ Your goal is clean data: complete, correct, consistent with how the company alre
    Before creating a master record (customer, item, supplier...), search for one that is already there, including similar names.
 3. Fill in everything you can find out yourself. Ask the colleague only for what you cannot know, all questions together.
 4. preview_document until `ok` is true. Read its problems and warnings; fix them. Tell the colleague about warnings that matter.
-5. Then save_draft, or open_prefilled_form when the colleague should review and finish it in the real form. Give the link.
-6. To submit, cancel, delete or update existing documents, find the documents and use the tool for it. What a tool returns is the truth: if it says the change is waiting, it has not happened yet.
+5. Then create_document, or open_prefilled_form when the colleague should review and finish it in the real form. Give the link.
+6. To update, submit, cancel or delete existing documents, find the documents and use the tool for it. What a tool returns is the truth: if it says the change is waiting, it has not happened yet.
 
 # Truth
 

@@ -13,7 +13,6 @@
   "role",
   "content",
   "files",
-  "documents",
   "link_doctype",
   "link_document"
  ],
@@ -35,12 +34,6 @@
    "fieldname": "files",
    "fieldtype": "JSON",
    "label": "Files"
-  },
-  {
-   "fieldname": "documents",
-   "fieldtype": "JSON",
-   "label": "Documents",
-   "description": "Documents the AI created or changed for this answer; shown as cards."
   },
   {
    "fieldname": "link_doctype",

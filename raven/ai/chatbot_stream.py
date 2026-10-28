@@ -44,8 +44,8 @@ DATA_TOOL_DESCRIPTION = (
 )
 DOCUMENT_TOOL_NAME = "document_assistant"
 DOCUMENT_TOOL_DESCRIPTION = (
-	"Works on documents for the user: checks values the way saving would, saves drafts, opens a filled form, and submits, cancels, deletes "
-	"or updates documents. It can also check data. Give it the whole task in one call, including finding the documents; it looks them up itself."
+	"Works on documents for the user: checks values the way saving would, opens a filled form, and creates, updates, submits, cancels "
+	"or deletes documents. It can also check data. Give it the whole task in one call, including finding the documents; it looks them up itself."
 )
 HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 
@@ -79,7 +79,6 @@ class DeltaPublisher:
 
 	def __init__(self, chat: str):
 		self.chat = chat
-		self.documents: list[dict] = []
 		self.buffer = ""
 		self.last_flush = 0.0
 
@@ -166,7 +165,7 @@ def manual_assistant_tool(
 def harness_tools(access: str, publisher: "DeltaPublisher | None") -> list:
 	"""The data tools a Raven Bot's "Chatbot Data Access" level gives; the document tools include the data tools."""
 	if access == "Check data and prepare documents":
-		return [*data_tools(), *document_tools(publisher.chat if publisher else None, publisher.documents if publisher else [])]
+		return [*data_tools(), *document_tools(publisher.chat if publisher else None)]
 	return data_tools() if access == "Check data" else []
 
 
