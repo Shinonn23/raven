@@ -15,6 +15,7 @@ def _serialize_chat(chat) -> dict:
 		"project": chat.project,
 		"owner": chat.owner,
 		"can_write": chat.has_permission("write"),
+		"actions": _pending_actions(chat.name),
 		"messages": [
 			{
 				"role": message.role,
@@ -28,6 +29,25 @@ def _serialize_chat(chat) -> dict:
 			for message in chat.messages
 		],
 	}
+
+
+def _pending_actions(chat: str) -> list[dict]:
+	"""The cards of this chat that wait for the user (only their own are visible to them)."""
+	return frappe.get_list(
+		"Raven AI Pending Action",
+		filters={"chat": chat, "status": "Pending"},
+		fields=["name", "action", "reference_doctype", "names", "values", "summary"],
+		order_by="creation asc",
+	)
+
+
+@frappe.whitelist(methods=["POST"])
+def decide_action(action: str, approve: bool) -> dict:
+	"""Approve (do it now, as the current user) or reject a card the AI asked for. Returns the card with its outcome."""
+	doc = frappe.get_doc("Raven AI Pending Action", action)
+	doc.check_permission("write")
+	doc.decide(approve)
+	return {"name": doc.name, "status": doc.status, "result": doc.result}
 
 
 @frappe.whitelist(methods=["GET"])

@@ -31,6 +31,7 @@
   "column_break_khmi",
   "allow_bot_to_write_documents",
   "allow_orchestrator_to_call",
+  "chatbot_data_access",
   "enable_file_search",
   "section_break_lwkx",
   "instruction",
@@ -134,6 +135,15 @@
    "fieldname": "allow_orchestrator_to_call",
    "fieldtype": "Check",
    "label": "Available to the Chatbot"
+  },
+  {
+   "default": "None",
+   "depends_on": "eval:doc.is_ai_bot && doc.allow_orchestrator_to_call;",
+   "description": "The data tools this agent gets when the chatbot calls it, always with the asking user's own permissions.",
+   "fieldname": "chatbot_data_access",
+   "fieldtype": "Select",
+   "label": "Chatbot Data Access",
+   "options": "None\nCheck data\nCheck data and prepare documents"
   },
   {
    "fieldname": "ai_tab",

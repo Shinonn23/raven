@@ -15,6 +15,7 @@ from raven.ai.agents_integration import RavenAgentManager
 from raven.ai.chatbot_models import ChatbotChoice
 from raven.ai.harness.action_log_hooks import ActionLogHooks
 from raven.ai.harness.data_tools import data_tools
+from raven.ai.harness.document_tools import document_tools
 from raven.ai.manual_sources import ManualSource, configured_sources
 from raven.ai.manual_tools import manual_status, manual_tools
 
@@ -27,6 +28,7 @@ PROMPTS = Path(__file__).parent / "prompts"
 ASSISTANT_PROMPT_PATH = PROMPTS / "chatbot_assistant.md"
 MANUAL_PROMPT_PATH = PROMPTS / "manual_assistant.md"
 DATA_PROMPT_PATH = PROMPTS / "data_assistant.md"
+DOCUMENT_PROMPT_PATH = PROMPTS / "document_assistant.md"
 MANUAL_TOOL_NAME = "manual_assistant"
 MANUAL_TOOL_DESCRIPTION = (
 	"Researches how the company's ERPNext system works and how its UAT tests are done, by searching and reading the official manuals "
@@ -36,6 +38,11 @@ DATA_TOOL_NAME = "data_assistant"
 DATA_TOOL_DESCRIPTION = (
 	"Checks the company's data and makes reports, read-only and with the user's own permissions: finds missing values and duplicates, "
 	"counts, lists and reads documents, runs reports. Give it the whole question. It returns the findings with the document names."
+)
+DOCUMENT_TOOL_NAME = "document_assistant"
+DOCUMENT_TOOL_DESCRIPTION = (
+	"Prepares documents for the user: checks values the way saving would, saves drafts, opens a filled form, and asks the user to approve "
+	"anything hard to undo (submit, cancel, delete, bulk change). It can also check data. Give it the whole task with the values you know."
 )
 HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 
@@ -143,12 +150,18 @@ def manual_assistant_tool(
 	)
 
 
-def data_assistant_tool(choice: ChatbotChoice, hooks: ActionLogHooks | None = None):
-	"""The data checker: its own agent with the read-only data tools, called by the orchestrator like a specialist."""
-	instruction = HTML_COMMENT.sub("", DATA_PROMPT_PATH.read_text(encoding="utf-8")).strip()
-	agent = working_agent("Data Assistant", instruction, choice)
-	agent.tools = [*agent.tools, *data_tools()]
-	return agent.as_tool(tool_name=DATA_TOOL_NAME, tool_description=DATA_TOOL_DESCRIPTION, max_turns=SPECIALIST_MAX_TURNS, hooks=hooks)
+def harness_tools(access: str, chat: str | None) -> list:
+	"""The data tools a Raven Bot's "Chatbot Data Access" level gives; the document tools include the data tools."""
+	if access == "Check data and prepare documents":
+		return [*data_tools(), *document_tools(chat)]
+	return data_tools() if access == "Check data" else []
+
+
+def harness_assistant_tool(name: str, prompt_path: Path, access: str, description: str, choice, publisher, hooks):
+	"""An assistant agent with the data (and document) tools, called by the orchestrator like a specialist."""
+	agent = working_agent(name, HTML_COMMENT.sub("", prompt_path.read_text(encoding="utf-8")).strip(), choice)
+	agent.tools = [*agent.tools, *harness_tools(access, publisher.chat if publisher else None)]
+	return agent.as_tool(tool_name=tool_name_for(name).lower(), tool_description=description, max_turns=SPECIALIST_MAX_TURNS, hooks=hooks)
 
 
 def specialist_tools(
@@ -161,15 +174,21 @@ def specialist_tools(
 		"Raven Bot", filters={"is_ai_bot": 1, "allow_orchestrator_to_call": 1}, fields=["name", "description"]
 	):
 		name = tool_name_for(bot.name)
-		agent = RavenAgentManager(frappe.get_doc("Raven Bot", bot.name)).create_agent()
+		doc = frappe.get_doc("Raven Bot", bot.name)
+		agent = RavenAgentManager(doc).create_agent()
+		agent.tools = [*agent.tools, *harness_tools(doc.chatbot_data_access, publisher.chat if publisher else None)]
 		tools.append(agent.as_tool(tool_name=name, tool_description=bot.description, max_turns=SPECIALIST_MAX_TURNS, hooks=hooks))
 		names[name] = bot.name
 	if sources := configured_sources():
 		tools.append(manual_assistant_tool(sources, choice, publisher, hooks))
 		names[MANUAL_TOOL_NAME] = _("the manuals")
-	if frappe.get_cached_doc("Raven Settings").chatbot_data_assistant:
-		tools.append(data_assistant_tool(choice, hooks))
+	settings = frappe.get_cached_doc("Raven Settings")
+	if settings.chatbot_data_assistant:
+		tools.append(harness_assistant_tool("Data Assistant", DATA_PROMPT_PATH, "Check data", DATA_TOOL_DESCRIPTION, choice, publisher, hooks))
 		names[DATA_TOOL_NAME] = _("the data")
+	if settings.chatbot_document_assistant:
+		tools.append(harness_assistant_tool("Document Assistant", DOCUMENT_PROMPT_PATH, "Check data and prepare documents", DOCUMENT_TOOL_DESCRIPTION, choice, publisher, hooks))
+		names[DOCUMENT_TOOL_NAME] = _("the documents")
 	return tools, names
 
 

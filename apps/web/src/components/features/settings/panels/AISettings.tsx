@@ -118,6 +118,13 @@ const AISettingsFields = () => {
                     {canEditProviders && <ManualSourcesField />}
                     {canEditProviders && (
                         <SwitchFormField
+                            name="chatbot_document_assistant"
+                            label={_("Chatbot Document Assistant")}
+                            formDescription={_("Lets the chatbot check and save drafts, open filled forms, and ask the user to approve submit, cancel, delete and bulk changes.")}
+                        />
+                    )}
+                    {canEditProviders && (
+                        <SwitchFormField
                             name="chatbot_data_assistant"
                             label={_("Chatbot Data Assistant")}
                             formDescription={_("Lets the chatbot check data and run reports for the user, with the user's own permissions. It only reads.")}

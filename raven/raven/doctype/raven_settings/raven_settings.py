@@ -30,6 +30,7 @@ class RavenSettings(Document):
 		blocked_links: DF.Table[RavenBlockedLinks]
 		manual_sources: DF.Table[RavenManualSource]
 		chatbot_data_assistant: DF.Check
+		chatbot_document_assistant: DF.Check
 		chatbot_models: DF.Table[RavenChatbotModel]
 		company_workspace_mapping: DF.Table[RavenHRCompanyWorkspace]
 		config: DF.SmallText | None

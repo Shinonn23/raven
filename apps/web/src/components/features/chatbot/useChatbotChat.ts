@@ -61,3 +61,21 @@ export const useChatbotShares = (chatId: string, enabled: boolean) => {
         unshare: (user: string) => unshare({ chat: chatId, user }).then((result) => mutate(result, { revalidate: false })),
     }
 }
+
+/** Approve or reject a card the AI asked for; the chat is reloaded so the card goes away and the outcome shows. */
+export const useDecideChatbotAction = (chatId: string) => {
+    const { call, loading } = useFrappePostCall<{ message: { status: string; result: string | null } }>("raven.api.chatbot.decide_action")
+    const { mutate } = useSWRConfig()
+
+    const decide = async (action: string, approve: boolean) => {
+        try {
+            const { message } = await call({ action, approve })
+            if (message.status === "Failed") errorResponseToast(_("The change was not made"), { message: message.result } as never)
+        } catch (error) {
+            errorResponseToast(_("Could not record your answer"), error as never)
+        }
+        await mutate(chatKey(chatId))
+    }
+
+    return { decide, loading }
+}

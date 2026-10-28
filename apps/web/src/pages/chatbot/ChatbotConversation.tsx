@@ -36,7 +36,7 @@ export default function ChatbotConversation() {
                 <ChatbotHeader title={title} chat={chat} />
                 {isLoading && !isAnswering
                     ? <div className="flex-1 p-4"><Skeleton className="h-4 w-1/2" /></div>
-                    : <ChatbotMessages messages={chat?.messages ?? []} pendingText={pendingText} streamingText={streamingText} status={status} />}
+                    : <ChatbotMessages messages={chat?.messages ?? []} actions={chat?.actions} chatId={chatId} pendingText={pendingText} streamingText={streamingText} status={status} />}
                 <div className="shrink-0 p-1.5 md:p-2">
                     <ChatbotComposer key={chatId ?? "new"} onSend={onSend} disabled={isAnswering || (chat ? !chat.can_write : false)} draftKey={`chatbot:${chatId ?? "new"}`} />
                 </div>

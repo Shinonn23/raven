@@ -9,9 +9,10 @@ import { useUserCookieData } from "@hooks/useUserCookieData"
 import { siteUrl } from "@lib/site"
 import { cn } from "@lib/utils"
 import _ from "@lib/translate"
+import { ChatbotActionCard } from "./ChatbotActionCard"
 import { ChatbotAttachmentCard } from "./ChatbotAttachmentCard"
 import { useManualImageOrigins } from "./useChatbotChoice"
-import type { ChatbotMessage } from "./types"
+import type { ChatbotMessage, ChatbotPendingAction } from "./types"
 
 const AssistantAvatar = () => (
     <Avatar className="size-8 rounded">
@@ -96,6 +97,9 @@ const MessageRow = ({ message }: { message: ChatbotMessage }) => {
 
 interface ChatbotMessagesProps {
     messages: ChatbotMessage[]
+    /** Changes the AI asked to make, waiting for the user's answer. */
+    actions?: ChatbotPendingAction[]
+    chatId?: string
     /** The message just sent, before the server has confirmed it. */
     pendingText: string | null
     /** What the bot has written so far: null when idle, "" while it is still thinking. */
@@ -104,12 +108,12 @@ interface ChatbotMessagesProps {
     status?: string
 }
 
-export const ChatbotMessages = ({ messages, pendingText, streamingText, status }: ChatbotMessagesProps) => {
+export const ChatbotMessages = ({ messages, actions = [], chatId, pendingText, streamingText, status }: ChatbotMessagesProps) => {
     const bottomRef = useRef<HTMLDivElement>(null)
     // A block body on purpose: an effect must not return a value (React would call it as the cleanup).
     useEffect(() => {
         bottomRef.current?.scrollIntoView({ block: "end" })
-    }, [messages.length, pendingText, streamingText, status])
+    }, [messages.length, actions.length, pendingText, streamingText, status])
 
     return (
         <div className="min-h-0 flex-1 overflow-y-auto py-2">
@@ -117,6 +121,7 @@ export const ChatbotMessages = ({ messages, pendingText, streamingText, status }
                 <p className="px-4 py-2 text-xs text-ink-gray-5">{_("This is the start of your conversation with Raven AI. Ask anything, or type / for skills.")}</p>
             )}
             {messages.map((message, index) => <MessageRow key={index} message={message} />)}
+            {chatId && actions.map((action) => <ChatbotActionCard key={action.name} chatId={chatId} action={action} />)}
             {pendingText && <MessageRow message={{ role: "user", content: pendingText, creation: new Date().toISOString() }} />}
             {streamingText ? <MessageRow message={{ role: "assistant", content: streamingText, creation: new Date().toISOString() }} /> : null}
             {(pendingText || streamingText !== null) && <div className="flex items-center gap-3 px-4 py-2 pl-[3.75rem] text-p-sm text-ink-gray-5"><Spinner className="size-4" />{status ?? _("Thinking…")}</div>}

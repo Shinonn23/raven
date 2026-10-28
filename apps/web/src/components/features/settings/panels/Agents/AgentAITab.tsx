@@ -2,7 +2,8 @@ import { Controller, useFormContext, useWatch } from "react-hook-form"
 import { InfoIcon } from "lucide-react"
 import { Alert, AlertDescription } from "@components/ui/alert"
 import { FormControl, FormDescription, FormField, FormItem, FormLabel } from "@components/ui/form"
-import { DataField, SwitchFormField } from "@components/ui/form-elements"
+import { DataField, SelectFormField, SwitchFormField } from "@components/ui/form-elements"
+import { SelectItem } from "@components/ui/select"
 import { Separator } from "@components/ui/separator"
 import { Slider } from "@components/ui/slider"
 import { Switch } from "@components/ui/switch"
@@ -19,6 +20,7 @@ const AgentAITab = () => {
     const openAIAssistantID = useWatch({ control, name: "openai_assistant_id" })
     const modelProvider = useWatch({ control, name: "model_provider" })
     const isAiBot = useWatch({ control, name: "is_ai_bot" })
+    const allowOrchestrator = useWatch({ control, name: "allow_orchestrator_to_call" })
 
     const isLocalLLM = modelProvider === "Local LLM"
     const isOpenAI = !modelProvider || modelProvider === "OpenAI"
@@ -67,6 +69,18 @@ const AgentAITab = () => {
                 label={_("Available to the Chatbot")}
                 formDescription={_("The Chatbot can call this agent as a specialist. Describe what it is good at in the Description field.")}
             />
+
+            {allowOrchestrator && (
+                <SelectFormField
+                    name="chatbot_data_access"
+                    label={_("Chatbot Data Access")}
+                    formDescription={_("The data tools this agent gets when the Chatbot calls it, always with the asking user's own permissions.")}
+                >
+                    <SelectItem value="None">{_("None")}</SelectItem>
+                    <SelectItem value="Check data">{_("Check data")}</SelectItem>
+                    <SelectItem value="Check data and prepare documents">{_("Check data and prepare documents")}</SelectItem>
+                </SelectFormField>
+            )}
 
             <Separator />
 

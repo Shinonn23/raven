@@ -8,6 +8,9 @@ from frappe.tests import IntegrationTestCase
 from raven.ai.chatbot_models import ChatbotChoice
 from raven.ai.chatbot_stream import DATA_TOOL_NAME, specialist_tools
 from raven.ai.harness.action_log_hooks import ActionLogHooks
+from raven.ai.harness.document_drafts import DocumentDraft
+from raven.ai.harness.document_tools import request_approval
+from raven.api.chatbot import get_chat
 from raven.ai.harness.data_tools import MAX_OUTPUT_CHARACTERS, answer, data_tools
 
 USER = "test1@example.com"
@@ -100,3 +103,93 @@ class TestActionLog(IntegrationTestCase):
 		self.assertEqual((tool.kind, tool.target, tool.outcome, tool.result_chars), ("Tool call", "list_documents", "Failed", 17))
 		self.assertEqual(json.loads(tool.arguments), {"doctype": "User"})
 		self.assertEqual(tool.detail, '{"error": "boom"}')
+
+
+class TestDocuments(IntegrationTestCase):
+	"""Drafts and approvals, as a user who may work with ToDo documents."""
+
+	def setUp(self):
+		frappe.set_user("Administrator")
+		self.chat = frappe.get_doc({"doctype": "Raven Chatbot Chat", "title": "Docs test"}).insert()
+		self.drafts = DocumentDraft()
+
+	def todo(self, **values):
+		return frappe.get_doc({"doctype": "ToDo", "description": "Check the stock", **values}).insert()
+
+	def test_preview_reports_a_problem_and_keeps_nothing(self):
+		before = frappe.db.count("ToDo")
+		result = self.drafts.preview("ToDo", {"description": "x", "reference_type": "DocType that does not exist", "reference_name": "y"})
+		self.assertFalse(result["ok"])
+		self.assertTrue(result["problems"])
+		self.assertEqual(frappe.db.count("ToDo"), before)
+
+	def test_preview_of_a_good_document_shows_what_the_system_fills_in(self):
+		result = self.drafts.preview("ToDo", {"description": "Call the supplier"})
+		self.assertTrue(result["ok"])
+		self.assertEqual(result["document"]["priority"], "Medium")
+		self.assertFalse(frappe.db.exists("ToDo", {"description": "Call the supplier"}))
+
+	def test_save_creates_and_updates_a_draft(self):
+		saved = self.drafts.save("ToDo", {"description": "First"})
+		self.assertTrue(saved["link"].startswith("/app/todo/"))
+		self.drafts.save("ToDo", {"description": "Second"}, saved["name"])
+		self.assertEqual(frappe.db.get_value("ToDo", saved["name"], "description"), "Second")
+
+	def test_protected_fields_cannot_be_set(self):
+		saved = self.drafts.save("ToDo", {"description": "Mine", "owner": "someone@example.com", "docstatus": 1})
+		self.assertEqual(frappe.db.get_value("ToDo", saved["name"], ["owner", "docstatus"]), ("Administrator", 0))
+
+	def test_prefilled_link_carries_simple_values_only(self):
+		link = self.drafts.prefilled_link("ToDo", {"description": "A b", "children": [1]})["link"]
+		self.assertEqual(link, "/app/todo/new?description=A%20b")
+
+	def ask(self, action, names, values=None):
+		request_approval(self.chat.name, action, "ToDo", names, values, "Do it")
+		return frappe.get_last_doc("Raven AI Pending Action")
+
+	def test_asking_changes_nothing_until_approved(self):
+		todo = self.todo()
+		card = self.ask("Delete", [todo.name])
+		self.assertEqual((card.status, card.chat), ("Pending", self.chat.name))
+		self.assertTrue(frappe.db.exists("ToDo", todo.name))
+
+	def test_approving_delete_and_bulk_update_do_the_work(self):
+		first, second = self.todo(), self.todo()
+		self.ask("Update many", [first.name, second.name], {"priority": "High", "owner": "x@example.com"}).decide(True)
+		self.assertEqual(frappe.db.get_value("ToDo", first.name, ["priority", "owner"]), ("High", "Administrator"))
+		card = self.ask("Delete", [first.name])
+		card.decide(True)
+		self.assertEqual(card.status, "Approved")
+		self.assertFalse(frappe.db.exists("ToDo", first.name))
+
+	def test_rejecting_does_nothing_and_cannot_be_decided_twice(self):
+		todo = self.todo()
+		card = self.ask("Delete", [todo.name])
+		card.decide(False)
+		self.assertEqual(card.status, "Rejected")
+		self.assertTrue(frappe.db.exists("ToDo", todo.name))
+		with self.assertRaises(frappe.ValidationError):
+			card.decide(True)
+
+	def test_a_failure_changes_nothing(self):
+		todo = self.todo()
+		card = self.ask("Delete", [todo.name])
+		frappe.delete_doc("ToDo", todo.name)
+		card.decide(True)
+		self.assertEqual(card.status, "Failed")
+
+	def test_only_the_owner_decides(self):
+		card = self.ask("Delete", [self.todo().name])
+		frappe.set_user("test1@example.com")
+		with self.assertRaises(frappe.PermissionError):
+			card.decide(True)
+
+	def test_asking_needs_permission_now(self):
+		todo = self.todo()
+		frappe.set_user("test1@example.com")
+		with self.assertRaises(frappe.PermissionError):
+			request_approval(self.chat.name, "Delete", "ToDo", [todo.name], None, "x")
+
+	def test_chat_lists_waiting_cards(self):
+		self.ask("Delete", [self.todo().name])
+		self.assertEqual([card["action"] for card in get_chat(self.chat.name)["actions"]], ["Delete"])

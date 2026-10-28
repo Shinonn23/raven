@@ -30,6 +30,7 @@ class RavenBot(Document):
 
 		allow_bot_to_write_documents: DF.Check
 		allow_orchestrator_to_call: DF.Check
+		chatbot_data_access: DF.Literal["None", "Check data", "Check data and prepare documents"]
 		bot_functions: DF.Table[RavenBotFunctions]
 		bot_name: DF.Data
 		debug_mode: DF.Check
