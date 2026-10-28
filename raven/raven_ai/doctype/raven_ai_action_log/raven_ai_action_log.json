@@ -1,0 +1,197 @@
+{
+ "actions": [],
+ "creation": "2026-10-28 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "modified": "2026-10-28 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Raven AI",
+ "owner": "Administrator",
+ "autoname": "hash",
+ "naming_rule": "Random",
+ "in_create": 1,
+ "field_order": [
+  "run",
+  "step",
+  "chat",
+  "kind",
+  "agent",
+  "target",
+  "effort",
+  "outcome",
+  "duration_ms",
+  "tokens_section",
+  "input_tokens",
+  "cached_input_tokens",
+  "output_tokens",
+  "reasoning_tokens",
+  "size_section",
+  "request_chars",
+  "input_items",
+  "result_chars",
+  "detail_section",
+  "arguments",
+  "detail",
+  "response_id",
+  "tool_call_id"
+ ],
+ "fields": [
+  {
+   "fieldname": "run",
+   "fieldtype": "Data",
+   "label": "Run",
+   "search_index": 1,
+   "read_only": 1,
+   "description": "One answer of the chatbot. All its model and tool calls share this."
+  },
+  {
+   "fieldname": "step",
+   "fieldtype": "Int",
+   "label": "Step",
+   "read_only": 1
+  },
+  {
+   "fieldname": "chat",
+   "fieldtype": "Link",
+   "label": "Chat",
+   "options": "Raven Chatbot Chat",
+   "search_index": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "kind",
+   "fieldtype": "Select",
+   "label": "Kind",
+   "options": "Model call\nTool call",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "agent",
+   "fieldtype": "Data",
+   "label": "Agent",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "target",
+   "fieldtype": "Data",
+   "label": "Model or Tool",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "effort",
+   "fieldtype": "Data",
+   "label": "Effort"
+  },
+  {
+   "fieldname": "outcome",
+   "fieldtype": "Select",
+   "label": "Outcome",
+   "options": "Done\nFailed",
+   "in_standard_filter": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "duration_ms",
+   "fieldtype": "Int",
+   "label": "Duration (ms)",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "tokens_section",
+   "fieldtype": "Section Break",
+   "label": "Tokens"
+  },
+  {
+   "fieldname": "input_tokens",
+   "fieldtype": "Int",
+   "label": "Input Tokens",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "cached_input_tokens",
+   "fieldtype": "Int",
+   "label": "Cached Input Tokens"
+  },
+  {
+   "fieldname": "output_tokens",
+   "fieldtype": "Int",
+   "label": "Output Tokens",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "reasoning_tokens",
+   "fieldtype": "Int",
+   "label": "Reasoning Tokens"
+  },
+  {
+   "fieldname": "size_section",
+   "fieldtype": "Section Break",
+   "label": "Size"
+  },
+  {
+   "fieldname": "request_chars",
+   "fieldtype": "Int",
+   "label": "Instruction and Input (characters)"
+  },
+  {
+   "fieldname": "input_items",
+   "fieldtype": "Int",
+   "label": "Input Items"
+  },
+  {
+   "fieldname": "result_chars",
+   "fieldtype": "Int",
+   "label": "Result (characters)"
+  },
+  {
+   "fieldname": "detail_section",
+   "fieldtype": "Section Break",
+   "label": "Detail"
+  },
+  {
+   "fieldname": "arguments",
+   "fieldtype": "Code",
+   "label": "Arguments",
+   "options": "JSON"
+  },
+  {
+   "fieldname": "detail",
+   "fieldtype": "Small Text",
+   "label": "Error"
+  },
+  {
+   "fieldname": "response_id",
+   "fieldtype": "Data",
+   "label": "OpenAI Response"
+  },
+  {
+   "fieldname": "tool_call_id",
+   "fieldtype": "Data",
+   "label": "Tool Call"
+  }
+ ],
+ "links": [],
+ "name": "Raven AI Action Log",
+ "permissions": [
+  {
+   "create": 1,
+   "read": 1,
+   "if_owner": 1,
+   "role": "Raven User"
+  },
+  {
+   "read": 1,
+   "export": 1,
+   "report": 1,
+   "role": "System Manager"
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

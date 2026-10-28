@@ -116,6 +116,13 @@ const AISettingsFields = () => {
                     ) : null}
                     <ChatbotModelsField enabled={Boolean(openaiEnabled)} />
                     {canEditProviders && <ManualSourcesField />}
+                    {canEditProviders && (
+                        <SwitchFormField
+                            name="chatbot_data_assistant"
+                            label={_("Chatbot Data Assistant")}
+                            formDescription={_("Lets the chatbot check data and run reports for the user, with the user's own permissions. It only reads.")}
+                        />
+                    )}
                     {openaiEnabled ? (openaiVersion && (
                         <p className="text-sm text-ink-gray-5">{_("OpenAI Python SDK Version:")} {openaiVersion.message}</p>
                     )) : null}

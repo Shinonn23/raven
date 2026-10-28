@@ -26,6 +26,7 @@
   "chatbot_models",
   "chatbot_instruction",
   "manual_sources",
+  "chatbot_data_assistant",
   "column_break_occp",
   "enable_local_llm",
   "local_llm_provider",
@@ -174,6 +175,15 @@
    "fieldtype": "Table",
    "label": "Manual Sources",
    "options": "Raven Manual Source",
+   "permlevel": 1
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.enable_ai_integration;",
+   "description": "Lets the chatbot check data and run reports for the user, with the user's own permissions. It only reads.",
+   "fieldname": "chatbot_data_assistant",
+   "fieldtype": "Check",
+   "label": "Chatbot Data Assistant",
    "permlevel": 1
   },
   {

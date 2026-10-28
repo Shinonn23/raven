@@ -13,6 +13,8 @@ from openai.types.shared import Reasoning
 
 from raven.ai.agents_integration import RavenAgentManager
 from raven.ai.chatbot_models import ChatbotChoice
+from raven.ai.harness.action_log_hooks import ActionLogHooks
+from raven.ai.harness.data_tools import data_tools
 from raven.ai.manual_sources import ManualSource, configured_sources
 from raven.ai.manual_tools import manual_status, manual_tools
 
@@ -24,10 +26,16 @@ SPECIALIST_MAX_TURNS = 25
 PROMPTS = Path(__file__).parent / "prompts"
 ASSISTANT_PROMPT_PATH = PROMPTS / "chatbot_assistant.md"
 MANUAL_PROMPT_PATH = PROMPTS / "manual_assistant.md"
+DATA_PROMPT_PATH = PROMPTS / "data_assistant.md"
 MANUAL_TOOL_NAME = "manual_assistant"
 MANUAL_TOOL_DESCRIPTION = (
 	"Researches how the company's ERPNext system works and how its UAT tests are done, by searching and reading the official manuals "
 	"as many times as it takes. Give it the user's whole question (and what they already tried). It returns the answer with links to the pages."
+)
+DATA_TOOL_NAME = "data_assistant"
+DATA_TOOL_DESCRIPTION = (
+	"Checks the company's data and makes reports, read-only and with the user's own permissions: finds missing values and duplicates, "
+	"counts, lists and reads documents, runs reports. Give it the whole question. It returns the findings with the document names."
 )
 HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 
@@ -110,7 +118,9 @@ def manual_instruction() -> str:
 	return HTML_COMMENT.sub("", MANUAL_PROMPT_PATH.read_text(encoding="utf-8")).strip()
 
 
-def manual_assistant_tool(sources: list[ManualSource], choice: ChatbotChoice, publisher: "DeltaPublisher | None" = None):
+def manual_assistant_tool(
+	sources: list[ManualSource], choice: ChatbotChoice, publisher: "DeltaPublisher | None" = None, hooks: ActionLogHooks | None = None
+):
 	"""The researcher: its own agent with the manual tools, called by the orchestrator like a specialist. Reading pages happens
 	in its context, not the orchestrator's, and only the answer comes back."""
 	listing = "\n".join(f"- {source.name}: {source.description}" for source in sources)
@@ -129,10 +139,21 @@ def manual_assistant_tool(sources: list[ManualSource], choice: ChatbotChoice, pu
 		tool_description=MANUAL_TOOL_DESCRIPTION,
 		max_turns=SPECIALIST_MAX_TURNS,
 		on_stream=show_progress,
+		hooks=hooks,
 	)
 
 
-def specialist_tools(choice: ChatbotChoice, publisher: "DeltaPublisher | None" = None) -> tuple[list, dict[str, str]]:
+def data_assistant_tool(choice: ChatbotChoice, hooks: ActionLogHooks | None = None):
+	"""The data checker: its own agent with the read-only data tools, called by the orchestrator like a specialist."""
+	instruction = HTML_COMMENT.sub("", DATA_PROMPT_PATH.read_text(encoding="utf-8")).strip()
+	agent = working_agent("Data Assistant", instruction, choice)
+	agent.tools = [*agent.tools, *data_tools()]
+	return agent.as_tool(tool_name=DATA_TOOL_NAME, tool_description=DATA_TOOL_DESCRIPTION, max_turns=SPECIALIST_MAX_TURNS, hooks=hooks)
+
+
+def specialist_tools(
+	choice: ChatbotChoice, publisher: "DeltaPublisher | None" = None, hooks: ActionLogHooks | None = None
+) -> tuple[list, dict[str, str]]:
 	"""The tools of the orchestrator: every agent marked "Available to the Chatbot", and the manual assistant when a manual
 	source is set up. Also tool name → agent name, for status lines."""
 	tools, names = [], {}
@@ -141,18 +162,23 @@ def specialist_tools(choice: ChatbotChoice, publisher: "DeltaPublisher | None" =
 	):
 		name = tool_name_for(bot.name)
 		agent = RavenAgentManager(frappe.get_doc("Raven Bot", bot.name)).create_agent()
-		tools.append(agent.as_tool(tool_name=name, tool_description=bot.description, max_turns=SPECIALIST_MAX_TURNS))
+		tools.append(agent.as_tool(tool_name=name, tool_description=bot.description, max_turns=SPECIALIST_MAX_TURNS, hooks=hooks))
 		names[name] = bot.name
 	if sources := configured_sources():
-		tools.append(manual_assistant_tool(sources, choice, publisher))
+		tools.append(manual_assistant_tool(sources, choice, publisher, hooks))
 		names[MANUAL_TOOL_NAME] = _("the manuals")
+	if frappe.get_cached_doc("Raven Settings").chatbot_data_assistant:
+		tools.append(data_assistant_tool(choice, hooks))
+		names[DATA_TOOL_NAME] = _("the data")
 	return tools, names
 
 
-def build_orchestrator(choice: ChatbotChoice, publisher: "DeltaPublisher | None" = None) -> tuple[Agent, dict[str, str]]:
+def build_orchestrator(
+	choice: ChatbotChoice, publisher: "DeltaPublisher | None" = None, hooks: ActionLogHooks | None = None
+) -> tuple[Agent, dict[str, str]]:
 	"""The central agent: Raven Settings' model and instruction, with the specialists as its tools."""
 	agent = working_agent("Raven AI", build_instruction(), choice)
-	tools, names = specialist_tools(choice, publisher)
+	tools, names = specialist_tools(choice, publisher, hooks)
 	agent.tools = [*agent.tools, *tools]
 	return agent, names
 
@@ -170,13 +196,17 @@ def _status_for(event, specialists: dict[str, str]) -> str | None:
 
 
 async def _run_streamed(prompt: str, history: list[dict], publisher: DeltaPublisher, choice: ChatbotChoice) -> str:
-	agent, specialists = build_orchestrator(choice, publisher)
-	result = Runner.run_streamed(agent, _input_items(prompt, history), max_turns=MAX_TURNS)
-	async for event in result.stream_events():
-		if event.type == "raw_response_event" and isinstance(event.data, ResponseTextDeltaEvent):
-			publisher.add(event.data.delta)
-		elif status := _status_for(event, specialists):
-			publisher.status(status)
+	hooks = ActionLogHooks(publisher.chat, choice.effort)
+	agent, specialists = build_orchestrator(choice, publisher, hooks)
+	result = Runner.run_streamed(agent, _input_items(prompt, history), max_turns=MAX_TURNS, hooks=hooks)
+	try:
+		async for event in result.stream_events():
+			if event.type == "raw_response_event" and isinstance(event.data, ResponseTextDeltaEvent):
+				publisher.add(event.data.delta)
+			elif status := _status_for(event, specialists):
+				publisher.status(status)
+	finally:
+		hooks.flush()
 	return result.final_output or ""
 
 

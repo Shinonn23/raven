@@ -29,6 +29,7 @@ class RavenSettings(Document):
 		auto_create_department_channel: DF.Check
 		blocked_links: DF.Table[RavenBlockedLinks]
 		manual_sources: DF.Table[RavenManualSource]
+		chatbot_data_assistant: DF.Check
 		chatbot_models: DF.Table[RavenChatbotModel]
 		company_workspace_mapping: DF.Table[RavenHRCompanyWorkspace]
 		config: DF.SmallText | None
