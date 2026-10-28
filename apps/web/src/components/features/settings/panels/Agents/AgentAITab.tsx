@@ -62,6 +62,14 @@ const AgentAITab = () => {
 
             <Separator />
 
+            <SwitchFormField
+                name="allow_orchestrator_to_call"
+                label={_("Available to the Chatbot")}
+                formDescription={_("The Chatbot can call this agent as a specialist. Describe what it is good at in the Description field.")}
+            />
+
+            <Separator />
+
             {isOpenAI && (
                 <>
                     <div className="grid items-start gap-4 md:grid-cols-2">

@@ -9,6 +9,7 @@ import { formatBytes, getFileExtension } from '@raven/lib/utils/operations'
 import { randomUUID } from '@lib/uuid'
 import { measureMediaDimensions } from '@lib/mediaDimensions'
 import _ from '@lib/translate'
+import type { SystemFile } from '../attach-picker/types'
 
 /**
  * 
@@ -65,6 +66,8 @@ export interface UploadedFile {
      *  optimistic placeholder reserve the box up front. */
     width?: number
     height?: number
+    /** Picked from files already in the system — removing it from the draft must NOT delete the File. */
+    isExisting?: boolean
 }
 
 
@@ -213,6 +216,24 @@ export const useAttachFile = (channelID: string) => {
     return onAddFile
 }
 
+/** Adds files that already exist in the system to the draft — no upload, nothing to delete on remove. */
+export const useAttachSystemFiles = (channelID: string) => {
+    const setUploadedFiles = useSetAtom(uploadedFilesAtom(channelID))
+
+    return (files: SystemFile[]) => setUploadedFiles((previous) => [
+        ...previous,
+        ...files.map((file) => ({
+            fileID: file.name,
+            fileURL: file.file_url,
+            id: randomUUID(),
+            fileName: file.file_name,
+            size: file.file_size,
+            timestamp: Date.now(),
+            isExisting: true,
+        })),
+    ])
+}
+
 export interface FileItemType {
     id: string,
     fileName: string,
@@ -222,6 +243,7 @@ export interface FileItemType {
     status: 'uploading' | 'uploaded' | 'error',
     fileID?: string,
     fileURL?: string,
+    isExisting?: boolean,
 }
 
 export const useRemoveFile = (channelID: string) => {
@@ -240,7 +262,7 @@ export const useRemoveFile = (channelID: string) => {
     const onRemoveFile = (file: FileItemType) => {
         if (file.fileID) {
             setUploadedFiles((prevFiles) => prevFiles.filter((f) => f.fileID !== file.fileID))
-            deleteDoc('File', file.fileID)
+            if (!file.isExisting) deleteDoc('File', file.fileID)
         } else {
             // Remove from both queues using frontend ID
             setUploadingFiles((prevFiles) => prevFiles.filter((f) => f.id !== file.id))

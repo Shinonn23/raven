@@ -1,3 +1,5 @@
+import re
+
 import frappe
 import openai
 
@@ -46,26 +48,58 @@ def get_open_ai_version():
 @frappe.whitelist()
 def get_openai_available_models():
 	"""
-	API to get the available OpenAI models for assistants
+	API to get the available OpenAI models for agents (every conversational model the account can use)
 	"""
 	frappe.has_permission(doctype="Raven Bot", ptype="read", throw=True)
+	return _openai_chat_model_ids()
+
+
+# Models that are listed by OpenAI but cannot run a conversation.
+NON_CHAT_MODEL_WORDS = (
+	"embedding", "whisper", "tts", "dall-e", "image", "moderation", "realtime",
+	"transcribe", "audio", "search", "davinci", "babbage", "sora", "computer-use",
+)  # fmt: skip
+
+
+MODEL_LIST_CACHE_KEY = "raven:openai_chat_models"
+MODEL_LIST_CACHE_SECONDS = 6 * 60 * 60
+DATED_SNAPSHOT = re.compile(r"-\d{4}-\d{2}-\d{2}$")
+
+
+def _newest_first(model_id: str):
+	"""GPT models before the rest, then the highest version first (gpt-6.1 > gpt-6 > gpt-5.5 > gpt-4o)."""
+	return (model_id.startswith("gpt"), [int(number) for number in re.findall(r"\d+", model_id)], model_id)
+
+
+def _without_dated_snapshots(model_ids: set[str]) -> set[str]:
+	"""Hide "o4-mini-2025-04-16" when "o4-mini" is listed; the plain name always points at the latest snapshot."""
+	return {model_id for model_id in model_ids if DATED_SNAPSHOT.sub("", model_id) == model_id or DATED_SNAPSHOT.sub("", model_id) not in model_ids}
+
+
+def _openai_chat_model_ids() -> list[str]:
+	"""Every model the OpenAI account lists that can hold a conversation, newest names first.
+	Excluded by what a model cannot do, not by an allow-list of names, so new model families appear on their own.
+
+	Asking OpenAI is slow, so the list is cached for a few hours per site. The key carries Raven Settings'
+	`modified`, so saving settings (a new API key or organization) starts a fresh list straight away."""
 	from raven.ai.openai_client import get_openai_models
 
-	models = get_openai_models()
+	key = f"{MODEL_LIST_CACHE_KEY}:{frappe.get_cached_doc('Raven Settings').modified}"
+	model_ids = frappe.cache.get_value(key)
+	if model_ids is None:
+		chat_models = {
+			model.id for model in get_openai_models() if not any(word in model.id for word in NON_CHAT_MODEL_WORDS)
+		}
+		model_ids = sorted(_without_dated_snapshots(chat_models), key=_newest_first, reverse=True)
+		frappe.cache.set_value(key, model_ids, expires_in_sec=MODEL_LIST_CACHE_SECONDS)
+	return model_ids
 
-	valid_prefixes = ["gpt-4", "gpt-3.5", "o1", "o3-mini"]
 
-	# Model should not contain these words
-	invalid_models = ["realtime", "transcribe", "search", "audio"]
-
-	compatible_models = []
-
-	for model in models:
-		if any(model.id.startswith(prefix) for prefix in valid_prefixes):
-			if not any(word in model.id for word in invalid_models):
-				compatible_models.append(model.id)
-
-	return compatible_models
+@frappe.whitelist(methods=["GET"])
+def get_chatbot_models() -> list[str]:
+	"""Models the OpenAI account can use for the chatbot, for the picker in AI Settings."""
+	frappe.has_permission("Raven Settings", ptype="write", throw=True)
+	return _openai_chat_model_ids()
 
 
 @frappe.whitelist()

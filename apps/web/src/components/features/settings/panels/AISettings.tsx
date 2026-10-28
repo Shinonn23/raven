@@ -8,6 +8,8 @@ import { Button } from "@components/ui/button"
 import { DataField, SelectFormField, SwitchFormField } from "@components/ui/form-elements"
 import { SelectItem } from "@components/ui/select"
 import { AdminSettingsForm } from "./AdminSettingsForm"
+import { ChatbotModelsField } from "./ChatbotModelsField"
+import { ManualSourcesField } from "./ManualSourcesField"
 import type { RavenSettings } from "@raven/types/Raven/RavenSettings"
 import _ from "@lib/translate"
 import { hasRole } from "@lib/permissions"
@@ -112,6 +114,8 @@ const AISettingsFields = () => {
                             />
                         </div>
                     ) : null}
+                    <ChatbotModelsField enabled={Boolean(openaiEnabled)} />
+                    {canEditProviders && <ManualSourcesField />}
                     {openaiEnabled ? (openaiVersion && (
                         <p className="text-sm text-ink-gray-5">{_("OpenAI Python SDK Version:")} {openaiVersion.message}</p>
                     )) : null}

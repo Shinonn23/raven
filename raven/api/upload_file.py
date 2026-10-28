@@ -184,3 +184,18 @@ def upload_file_with_message():
 	message_doc.save()
 
 	return message_doc
+
+
+@frappe.whitelist(methods=["GET"])
+def get_attachable_files(search: str | None = None, limit: int = 30) -> list[dict]:
+	"""Files in the system the current user can read, newest first, optionally matching `search`."""
+	filters = {"is_folder": 0}
+	or_filters = {"file_name": ["like", f"%{search.strip()}%"]} if search and search.strip() else None
+	return frappe.get_list(
+		"File",
+		filters=filters,
+		or_filters=or_filters,
+		fields=["name", "file_name", "file_url", "file_size", "creation", "attached_to_doctype", "is_private"],
+		order_by="creation desc",
+		limit=min(int(limit), 100),
+	)

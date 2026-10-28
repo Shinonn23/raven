@@ -36,6 +36,8 @@ export interface RavenBot{
 	enable_code_interpreter?: 0 | 1
 	/**	Allow Bot to Write Documents : Check	*/
 	allow_bot_to_write_documents?: 0 | 1
+	/** Available to the Chatbot */
+	allow_orchestrator_to_call?: 0 | 1
 	/**	Enable File Search : Check - Enable this if you want the bot to be able to read PDF files and scan them.
 
 File search enables the assistant with knowledge from files that you upload. Once a file is uploaded, the assistant automatically decides when to retrieve content based on user requests.	*/

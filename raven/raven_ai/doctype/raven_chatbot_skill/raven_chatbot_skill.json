@@ -1,0 +1,73 @@
+{
+ "actions": [],
+ "creation": "2026-10-28 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "modified": "2026-10-28 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Raven AI",
+ "owner": "Administrator",
+ "autoname": "hash",
+ "naming_rule": "Random",
+ "field_order": [
+  "title",
+  "command",
+  "is_company",
+  "prompt"
+ ],
+ "fields": [
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "label": "Title",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "command",
+   "fieldtype": "Data",
+   "label": "Command",
+   "reqd": 1,
+   "in_list_view": 1,
+   "description": "Typed after / in the chatbot, e.g. weekly-report"
+  },
+  {
+   "fieldname": "is_company",
+   "fieldtype": "Check",
+   "label": "Company skill",
+   "description": "Visible to everyone. Only Raven Admins can set this."
+  },
+  {
+   "fieldname": "prompt",
+   "fieldtype": "Long Text",
+   "label": "Prompt",
+   "reqd": 1
+  }
+ ],
+ "links": [],
+ "name": "Raven Chatbot Skill",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "read": 1,
+   "write": 1,
+   "if_owner": 1,
+   "role": "Raven User"
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "read": 1,
+   "write": 1,
+   "role": "Raven Admin"
+  },
+  {
+   "read": 1,
+   "role": "Raven User"
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

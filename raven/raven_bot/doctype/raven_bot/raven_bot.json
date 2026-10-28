@@ -30,6 +30,7 @@
   "enable_code_interpreter",
   "column_break_khmi",
   "allow_bot_to_write_documents",
+  "allow_orchestrator_to_call",
   "enable_file_search",
   "section_break_lwkx",
   "instruction",
@@ -125,6 +126,14 @@
    "fieldname": "allow_bot_to_write_documents",
    "fieldtype": "Check",
    "label": "Allow Bot to Write Documents"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.is_ai_bot;",
+   "description": "The chatbot can call this agent as a specialist. Describe what it is good at in the Description field.",
+   "fieldname": "allow_orchestrator_to_call",
+   "fieldtype": "Check",
+   "label": "Available to the Chatbot"
   },
   {
    "fieldname": "ai_tab",

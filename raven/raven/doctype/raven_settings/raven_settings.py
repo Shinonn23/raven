@@ -5,6 +5,9 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 
+from raven.ai.chatbot_models import validate_chatbot_models
+from raven.ai.manual_sources import validate_manual_sources
+
 
 class RavenSettings(Document):
 	# begin: auto-generated types
@@ -16,6 +19,8 @@ class RavenSettings(Document):
 		from frappe.types import DF
 
 		from raven.raven.doctype.raven_blocked_links.raven_blocked_links import RavenBlockedLinks
+		from raven.raven_ai.doctype.raven_chatbot_model.raven_chatbot_model import RavenChatbotModel
+		from raven.raven_ai.doctype.raven_manual_source.raven_manual_source import RavenManualSource
 		from raven.raven_integrations.doctype.raven_hr_company_workspace.raven_hr_company_workspace import (
 			RavenHRCompanyWorkspace,
 		)
@@ -23,6 +28,8 @@ class RavenSettings(Document):
 		auto_add_system_users: DF.Check
 		auto_create_department_channel: DF.Check
 		blocked_links: DF.Table[RavenBlockedLinks]
+		manual_sources: DF.Table[RavenManualSource]
+		chatbot_models: DF.Table[RavenChatbotModel]
 		company_workspace_mapping: DF.Table[RavenHRCompanyWorkspace]
 		config: DF.SmallText | None
 		department_channel_type: DF.Literal["Public", "Private"]
@@ -56,6 +63,9 @@ class RavenSettings(Document):
 	# end: auto-generated types
 
 	def validate(self):
+		validate_chatbot_models(self.chatbot_models)
+		validate_manual_sources(self.manual_sources)
+
 		if self.auto_create_department_channel:
 			if not self.company_workspace_mapping:
 				frappe.throw(_("Please map the companies to the workspace before enabling this feature."))

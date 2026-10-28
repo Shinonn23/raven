@@ -9,6 +9,8 @@ import { ListPageSkeleton } from "@components/layout/ListPageSkeleton"
 import _ from "@lib/translate"
 import ErrorPage from "@pages/ErrorPage"
 import Threads from "@pages/threads/Threads"
+import Chatbot from "@pages/chatbot/Chatbot"
+import ChatbotConversation from "@pages/chatbot/ChatbotConversation"
 import DirectMessages, { DirectMessagesIndex } from "@pages/dm-channel/DirectMessages"
 import DirectMessage from "@pages/dm-channel/DirectMessage"
 import ThreadDrawerRoute from "@components/features/message/ThreadDrawerRoute"
@@ -99,6 +101,11 @@ const router = createBrowserRouter(
         <Route path=":id" element={<DirectMessage />}>
           <Route path="thread/:threadID" element={<ThreadDrawerRoute />} />
         </Route>
+      </Route>
+      <Route path="chatbot" element={<Chatbot />}>
+        <Route index element={<ChatbotConversation />} />
+        <Route path="new" element={<ChatbotConversation />} />
+        <Route path=":id" element={<ChatbotConversation />} />
       </Route>
       <Route path="notifications" element={<Notifications />}>
         <Route path=":channelID/:messageID?" element={<NotificationChatRoute />} />

@@ -14,7 +14,7 @@ import { useUnreadThreadsCount } from "@stores/threads/useUnreadThreads"
 import _ from "@lib/translate"
 import { cn } from "@lib/utils"
 import { useAtom, useSetAtom } from "jotai"
-import { BellIcon, BookmarkIcon, CalendarClockIcon, MessageSquareTextIcon, MoreHorizontalIcon, SearchIcon, UsersIcon } from "lucide-react"
+import { BellIcon, BookmarkIcon, CalendarClockIcon, BotMessageSquareIcon, MessageSquareTextIcon, MoreHorizontalIcon, SearchIcon, UsersIcon } from "lucide-react"
 import { NavLink } from "react-router"
 import { settingsDialogOpenTab } from "@components/features/settings/settingsDialogAtom"
 import { DndContext, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core"
@@ -65,6 +65,7 @@ const PrimarySidebar = () => {
                     <NotificationsLink />
                     <DirectMessagesLink />
                     <ThreadsLink />
+                    <ChatbotLink />
                     <div className="px-3.5 w-full">
                         <Separator />
                     </div>
@@ -215,6 +216,16 @@ const ThreadsLink = () => {
         )}
     </NavLink>
 }
+
+const ChatbotLink = () => (
+    <NavLink to="chatbot">
+        {({ isActive }) => (
+            <IconBox isActive={isActive} title={_("Chatbot")}>
+                <BotMessageSquareIcon />
+            </IconBox>
+        )}
+    </NavLink>
+)
 
 const LaterLink = () => {
     // Fired-but-unread reminders — cleared as they're opened on the In progress tab.

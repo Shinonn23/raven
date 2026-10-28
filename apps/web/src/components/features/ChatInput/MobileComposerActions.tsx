@@ -3,9 +3,10 @@ import { Plus, Camera, Images, FileBox, type LucideIcon, FilesIcon, ChartBar, Vi
 import { Button } from "@components/ui/button"
 import { Drawer, DrawerContent, DrawerDescription, DrawerTitle, DrawerTrigger } from "@components/ui/drawer"
 import { useSetAtom } from "jotai"
-import { preparingFilesAtom, useAttachFile, type PreparingFile } from "./useFileInput"
+import { preparingFilesAtom, useAttachFile, useAttachSystemFiles, type PreparingFile } from "./useFileInput"
 import { CreatePollDialog } from "./CreatePollDialog"
 import AttachFrappeDocumentDialog from "./AttachFrappeDocumentDialog"
+import { AttachPickerDialog } from "../attach-picker/AttachPickerDialog"
 import { isAndroid } from "@utils/platform"
 import _ from "@lib/translate"
 
@@ -44,12 +45,13 @@ export const MobileComposerActions = ({
     const [sheetOpen, setSheetOpen] = useState(false)
     const [pollOpen, setPollOpen] = useState(false)
     const [docOpen, setDocOpen] = useState(false)
+    const [filesOpen, setFilesOpen] = useState(false)
+    const onAddSystemFiles = useAttachSystemFiles(channelID)
     const onAddFile = useAttachFile(channelID)
     const setPreparing = useSetAtom(preparingFilesAtom(channelID))
     const cameraInputRef = useRef<HTMLInputElement>(null)
     const videoCaptureRef = useRef<HTMLInputElement>(null)
     const galleryInputRef = useRef<HTMLInputElement>(null)
-    const fileInputRef = useRef<HTMLInputElement>(null)
 
     const iosApp = !!import.meta.env.VITE_NATIVE && window.Capacitor?.getPlatform() === "ios"
     // The ternary keeps the native chunk out of browser builds entirely.
@@ -85,7 +87,7 @@ export const MobileComposerActions = ({
         // video capture need separate tiles (see the file inputs below).
         ...(isAndroid ? [{ icon: Video, label: _("Video"), onSelect: () => videoCaptureRef.current?.click() }] : []),
         { icon: Images, label: _("Photos"), onSelect: () => (iosApp ? pickNative("photos") : galleryInputRef.current?.click()) },
-        { icon: FilesIcon, label: _("Files"), onSelect: () => (iosApp ? pickNative("files") : fileInputRef.current?.click()) },
+        { icon: FilesIcon, label: _("Files"), onSelect: () => (iosApp ? pickNative("files") : setFilesOpen(true)) },
         { icon: ChartBar, label: _("Poll"), onSelect: () => setPollOpen(true) },
         { icon: FileBox, label: _("Document"), onSelect: () => setDocOpen(true) },
     ]
@@ -101,7 +103,6 @@ export const MobileComposerActions = ({
                 <input type="file" accept="image/*,video/*" capture="environment" ref={cameraInputRef} className="hidden" onChange={onPicked} />
             )}
             <input type="file" accept="image/*,video/*" multiple ref={galleryInputRef} className="hidden" onChange={onPicked} />
-            <input type="file" multiple ref={fileInputRef} className="hidden" onChange={onPicked} />
 
             <Drawer open={sheetOpen} onOpenChange={setSheetOpen}>
                 <DrawerTrigger asChild>
@@ -137,6 +138,7 @@ export const MobileComposerActions = ({
             {/* Controlled dialogs opened from the sheet rows (triggers hidden). */}
             <CreatePollDialog channelID={channelID} open={pollOpen} onOpenChange={setPollOpen} hideTrigger />
             <AttachFrappeDocumentDialog channelID={channelID} open={docOpen} onOpenChange={setDocOpen} hideTrigger />
+            <AttachPickerDialog open={filesOpen} onOpenChange={setFilesOpen} onUploadFiles={onAddFile} onPickSystemFiles={onAddSystemFiles} />
         </>
     )
 }

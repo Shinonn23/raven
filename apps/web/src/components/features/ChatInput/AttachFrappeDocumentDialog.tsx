@@ -34,6 +34,8 @@ interface AttachFrappeDocumentDialogProps {
     onOpenChange?: (open: boolean) => void
     /** Hide the built-in icon trigger when an external control (e.g. mobile sheet) opens this. */
     hideTrigger?: boolean
+    /** Documents to offer as one-click picks (e.g. the user's most used). */
+    recommended?: LinkedDocument[]
 }
 
 /**
@@ -43,7 +45,7 @@ interface AttachFrappeDocumentDialogProps {
  * can still go with it. One document per message: attaching again replaces
  * the staged one.
  */
-const AttachFrappeDocumentDialog = ({ channelID, open, onOpenChange, hideTrigger }: AttachFrappeDocumentDialogProps) => {
+const AttachFrappeDocumentDialog = ({ channelID, open, onOpenChange, hideTrigger, recommended = [] }: AttachFrappeDocumentDialogProps) => {
     const [internalOpen, setInternalOpen] = useState(false)
     const isOpen = open ?? internalOpen
     const setOpen = onOpenChange ?? setInternalOpen
@@ -67,11 +69,12 @@ const AttachFrappeDocumentDialog = ({ channelID, open, onOpenChange, hideTrigger
         setValue('docname', '')
     }, [doctype, setValue])
 
-    const onSubmit = (data: AttachDocumentForm) => {
-        setLinkedDocument({ doctype: data.doctype, docname: data.docname })
-        addRecentlyUsedDocType(data.doctype)
+    const attach = (document: LinkedDocument) => {
+        setLinkedDocument(document)
+        addRecentlyUsedDocType(document.doctype)
         setOpen(false)
     }
+    const onSubmit = (data: AttachDocumentForm) => attach({ doctype: data.doctype, docname: data.docname })
 
     return (
         <Dialog open={isOpen} onOpenChange={setOpen}>
@@ -111,6 +114,20 @@ const AttachFrappeDocumentDialog = ({ channelID, open, onOpenChange, hideTrigger
                             <DialogTitle>{_("Attach document from other apps")}</DialogTitle>
                             <DialogDescription>{_("Choose a document from the system to send with your message.")}</DialogDescription>
                         </DialogHeader>
+
+                        {recommended.length > 0 && (
+                            <div className="flex flex-col gap-1">
+                                <span className="text-xs text-ink-gray-5">{_("Frequently used")}</span>
+                                {recommended.map((document) => (
+                                    <Button key={`${document.doctype}/${document.docname}`} type="button" variant="subtle" className="justify-start"
+                                        onClick={() => attach(document)}>
+                                        <FileBoxIcon />
+                                        <span className="truncate">{document.docname}</span>
+                                        <span className="ms-auto text-ink-gray-5">{document.doctype}</span>
+                                    </Button>
+                                ))}
+                            </div>
+                        )}
 
                         <LinkFormField
                             name="doctype"

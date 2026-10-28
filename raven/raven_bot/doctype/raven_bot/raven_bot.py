@@ -29,6 +29,7 @@ class RavenBot(Document):
 		from raven.raven_ai.doctype.raven_bot_functions.raven_bot_functions import RavenBotFunctions
 
 		allow_bot_to_write_documents: DF.Check
+		allow_orchestrator_to_call: DF.Check
 		bot_functions: DF.Table[RavenBotFunctions]
 		bot_name: DF.Data
 		debug_mode: DF.Check
@@ -55,6 +56,9 @@ class RavenBot(Document):
 	# end: auto-generated types
 
 	def validate(self):
+		if self.allow_orchestrator_to_call and not self.description:
+			frappe.throw(_("Describe what this agent is good at, so the chatbot knows when to call it."))
+
 		if self.is_ai_bot and not self.instruction:
 			frappe.throw(_("Please provide an instruction for this AI Agent."))
 

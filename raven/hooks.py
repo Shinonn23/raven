@@ -266,6 +266,7 @@ website_route_rules = [
 page_renderer = ["raven.page_renderers.RavenV3ServiceWorker"]
 
 permission_query_conditions = {
+	"Raven Chatbot Skill": "raven.raven_ai.doctype.raven_chatbot_skill.raven_chatbot_skill.skill_query",
 	"Raven Channel": "raven.permissions.raven_channel_query",
 	"Raven Message": "raven.permissions.raven_message_query",
 	"Raven Poll": "raven.permissions.raven_poll_query",
@@ -276,6 +277,7 @@ permission_query_conditions = {
 }
 
 has_permission = {
+	"Raven Chatbot Skill": "raven.raven_ai.doctype.raven_chatbot_skill.raven_chatbot_skill.skill_has_permission",
 	"Raven Channel": "raven.permissions.channel_has_permission",
 	"Raven Channel Member": "raven.permissions.channel_member_has_permission",
 	"Raven Message": "raven.permissions.message_has_permission",

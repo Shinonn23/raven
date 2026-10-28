@@ -23,6 +23,9 @@
   "openai_organisation_id",
   "openai_api_key",
   "openai_project_id",
+  "chatbot_models",
+  "chatbot_instruction",
+  "manual_sources",
   "column_break_occp",
   "enable_local_llm",
   "local_llm_provider",
@@ -147,6 +150,30 @@
    "fieldname": "openai_project_id",
    "fieldtype": "Data",
    "label": "OpenAI Project ID",
+   "permlevel": 1
+  },
+  {
+   "depends_on": "eval:doc.enable_ai_integration;",
+   "description": "The models users can pick in the Chatbot. The first one is the default.",
+   "fieldname": "chatbot_models",
+   "fieldtype": "Table",
+   "label": "Chatbot Models",
+   "options": "Raven Chatbot Model"
+  },
+  {
+   "depends_on": "eval:doc.enable_ai_integration;",
+   "description": "Optional. Replaces the built-in instruction of the chatbot orchestrator.",
+   "fieldname": "chatbot_instruction",
+   "fieldtype": "Long Text",
+   "label": "Chatbot Instruction"
+  },
+  {
+   "depends_on": "eval:doc.enable_ai_integration;",
+   "description": "The manual sites the chatbot can search and read (see the search API of connect_diagnostics_manual).",
+   "fieldname": "manual_sources",
+   "fieldtype": "Table",
+   "label": "Manual Sources",
+   "options": "Raven Manual Source",
    "permlevel": 1
   },
   {

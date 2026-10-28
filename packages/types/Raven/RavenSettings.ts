@@ -26,6 +26,12 @@ export interface RavenSettings{
 	openai_api_key?: string
 	/**	OpenAI Project ID : Data - If not set, the integration will use the default project	*/
 	openai_project_id?: string
+	/** Chatbot Models */
+	chatbot_models?: { name?: string; model: string; efforts?: string }[]
+	/** Chatbot Instruction */
+	chatbot_instruction?: string
+	/** Manual Sources */
+	manual_sources?: { name?: string; source_name: string; base_url: string; description?: string; api_key?: string; api_secret?: string }[]
 	/**	Enable Local LLM : Check	*/
 	enable_local_llm?: 0 | 1
 	/**	Local LLM Provider : Select	*/

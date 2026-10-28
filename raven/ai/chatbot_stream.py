@@ -1,0 +1,187 @@
+import asyncio
+import dataclasses
+import functools
+import re
+import time
+from pathlib import Path
+
+import frappe
+from agents import Agent, Runner
+from frappe import _
+from openai.types.responses import ResponseTextDeltaEvent
+from openai.types.shared import Reasoning
+
+from raven.ai.agents_integration import RavenAgentManager
+from raven.ai.chatbot_models import ChatbotChoice
+from raven.ai.manual_sources import ManualSource, configured_sources
+from raven.ai.manual_tools import manual_status, manual_tools
+
+FLUSH_INTERVAL_SECONDS = 0.1
+# The assistant works in a loop until the task is done; these only stop a loop that never ends.
+MAX_TURNS = 40
+SPECIALIST_MAX_TURNS = 25
+
+PROMPTS = Path(__file__).parent / "prompts"
+ASSISTANT_PROMPT_PATH = PROMPTS / "chatbot_assistant.md"
+MANUAL_PROMPT_PATH = PROMPTS / "manual_assistant.md"
+MANUAL_TOOL_NAME = "manual_assistant"
+MANUAL_TOOL_DESCRIPTION = (
+	"Researches how the company's ERPNext system works and how its UAT tests are done, by searching and reading the official manuals "
+	"as many times as it takes. Give it the user's whole question (and what they already tried). It returns the answer with links to the pages."
+)
+HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
+
+
+@functools.cache
+def default_instruction() -> str:
+	"""The built-in assistant instruction (prompts/chatbot_assistant.md) without its maintainer comments."""
+	return HTML_COMMENT.sub("", ASSISTANT_PROMPT_PATH.read_text(encoding="utf-8")).strip()
+
+
+def current_context() -> str:
+	"""Facts that differ per request. Appended after the fixed instruction so the fixed part stays identical
+	for every user, which lets OpenAI's prompt caching reuse it."""
+	lines = [
+		f"- Today: {frappe.utils.getdate().strftime('%A, %d %B %Y')}",
+		f"- You are talking to: {frappe.utils.get_fullname(frappe.session.user)} ({frappe.session.user})",
+	]
+	if company := frappe.defaults.get_user_default("company") or frappe.defaults.get_global_default("company"):
+		lines.append(f"- Their default company: {company}")
+	return "# Current context\n\n" + "\n".join(lines)
+
+
+def build_instruction() -> str:
+	"""The orchestrator's instruction: the admin's replacement from Raven Settings if set, else the built-in one."""
+	base = frappe.get_cached_doc("Raven Settings").chatbot_instruction or default_instruction()
+	return f"{base.strip()}\n\n{current_context()}"
+
+
+class DeltaPublisher:
+	"""Sends the chatbot's text to the asking user's browser in small batches, not one event per token."""
+
+	def __init__(self, chat: str):
+		self.chat = chat
+		self.buffer = ""
+		self.last_flush = 0.0
+
+	def add(self, text: str):
+		self.buffer += text
+		if time.monotonic() - self.last_flush >= FLUSH_INTERVAL_SECONDS:
+			self.flush()
+
+	def flush(self):
+		if self.buffer:
+			frappe.publish_realtime("chatbot_delta", {"chat": self.chat, "text": self.buffer}, user=frappe.session.user)
+			self.buffer = ""
+		self.last_flush = time.monotonic()
+
+	def status(self, text: str):
+		"""A short progress line, e.g. which specialist is being asked."""
+		frappe.publish_realtime("chatbot_status", {"chat": self.chat, "text": text}, user=frappe.session.user)
+
+
+def tool_name_for(bot_name: str) -> str:
+	return re.sub(r"[^a-zA-Z0-9_-]+", "_", bot_name).strip("_")[:64]
+
+
+def working_agent(name: str, instruction: str, choice: ChatbotChoice) -> Agent:
+	"""An agent for the chosen model, made like every Raven bot (provider, model settings) from an unsaved Raven Bot.
+	It may call several tools in one step, and thinks as hard as the user chose."""
+	bot = frappe.get_doc(
+		{
+			"doctype": "Raven Bot",
+			"bot_name": name,
+			"is_ai_bot": 1,
+			"model_provider": "OpenAI",
+			"model": choice.model,
+			"instruction": instruction,
+		}
+	)
+	agent = RavenAgentManager(bot).create_agent()
+	settings = {"parallel_tool_calls": True}
+	if choice.effort:
+		settings["reasoning"] = Reasoning(effort=choice.effort)
+	agent.model_settings = dataclasses.replace(agent.model_settings, **settings)
+	return agent
+
+
+@functools.cache
+def manual_instruction() -> str:
+	return HTML_COMMENT.sub("", MANUAL_PROMPT_PATH.read_text(encoding="utf-8")).strip()
+
+
+def manual_assistant_tool(sources: list[ManualSource], choice: ChatbotChoice, publisher: "DeltaPublisher | None" = None):
+	"""The researcher: its own agent with the manual tools, called by the orchestrator like a specialist. Reading pages happens
+	in its context, not the orchestrator's, and only the answer comes back."""
+	listing = "\n".join(f"- {source.name}: {source.description}" for source in sources)
+	agent = working_agent("Manual Assistant", f"{manual_instruction()}\n\n# Sources\n\n{listing}", ChatbotChoice(choice.model, None))
+	agent.tools = [*agent.tools, *manual_tools(sources)]
+
+	async def show_progress(event):
+		inner = event.event
+		if publisher and inner.type == "run_item_stream_event" and inner.item.type == "tool_call_item":
+			raw = inner.item.raw_item
+			if line := manual_status(getattr(raw, "name", ""), getattr(raw, "arguments", "")):
+				publisher.status(line)
+
+	return agent.as_tool(
+		tool_name=MANUAL_TOOL_NAME,
+		tool_description=MANUAL_TOOL_DESCRIPTION,
+		max_turns=SPECIALIST_MAX_TURNS,
+		on_stream=show_progress,
+	)
+
+
+def specialist_tools(choice: ChatbotChoice, publisher: "DeltaPublisher | None" = None) -> tuple[list, dict[str, str]]:
+	"""The tools of the orchestrator: every agent marked "Available to the Chatbot", and the manual assistant when a manual
+	source is set up. Also tool name → agent name, for status lines."""
+	tools, names = [], {}
+	for bot in frappe.get_all(
+		"Raven Bot", filters={"is_ai_bot": 1, "allow_orchestrator_to_call": 1}, fields=["name", "description"]
+	):
+		name = tool_name_for(bot.name)
+		agent = RavenAgentManager(frappe.get_doc("Raven Bot", bot.name)).create_agent()
+		tools.append(agent.as_tool(tool_name=name, tool_description=bot.description, max_turns=SPECIALIST_MAX_TURNS))
+		names[name] = bot.name
+	if sources := configured_sources():
+		tools.append(manual_assistant_tool(sources, choice, publisher))
+		names[MANUAL_TOOL_NAME] = _("the manuals")
+	return tools, names
+
+
+def build_orchestrator(choice: ChatbotChoice, publisher: "DeltaPublisher | None" = None) -> tuple[Agent, dict[str, str]]:
+	"""The central agent: Raven Settings' model and instruction, with the specialists as its tools."""
+	agent = working_agent("Raven AI", build_instruction(), choice)
+	tools, names = specialist_tools(choice, publisher)
+	agent.tools = [*agent.tools, *tools]
+	return agent, names
+
+
+def _input_items(prompt: str, history: list[dict]) -> list[dict]:
+	return [*({"role": item["role"], "content": item["content"]} for item in history if item["content"]), {"role": "user", "content": prompt}]
+
+
+def _status_for(event, specialists: dict[str, str]) -> str | None:
+	"""A progress line when the orchestrator starts calling one of its specialists."""
+	if event.type != "run_item_stream_event" or event.item.type != "tool_call_item":
+		return None
+	name = getattr(event.item.raw_item, "name", None)
+	return _("Asking {0}…").format(specialists[name]) if name in specialists else None
+
+
+async def _run_streamed(prompt: str, history: list[dict], publisher: DeltaPublisher, choice: ChatbotChoice) -> str:
+	agent, specialists = build_orchestrator(choice, publisher)
+	result = Runner.run_streamed(agent, _input_items(prompt, history), max_turns=MAX_TURNS)
+	async for event in result.stream_events():
+		if event.type == "raw_response_event" and isinstance(event.data, ResponseTextDeltaEvent):
+			publisher.add(event.data.delta)
+		elif status := _status_for(event, specialists):
+			publisher.status(status)
+	return result.final_output or ""
+
+
+def stream_reply(prompt: str, history: list[dict], publisher: DeltaPublisher, choice: ChatbotChoice) -> str:
+	"""Run the orchestrator, publishing its text as it is written; returns the whole answer."""
+	answer = asyncio.run(_run_streamed(prompt, history, publisher, choice))
+	publisher.flush()
+	return answer

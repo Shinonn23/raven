@@ -125,7 +125,7 @@ const ModelSelector = () => {
                     <FormDescription>
                         {modelProvider === "Local LLM"
                             ? _("Select a model available on your local LLM server.")
-                            : _("The model should be compatible with the OpenAI Assistants API. We recommend using models in the GPT-4 family for best results.")}
+                            : _("Models available to your OpenAI account, newest first. Pick a current model for best results.")}
                     </FormDescription>
                     <FormMessage />
                 </FormItem>

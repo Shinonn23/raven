@@ -1,9 +1,10 @@
 import { useAtomValue, useSetAtom } from 'jotai'
-import { uploadingFilesAtom, uploadedFilesAtom, preparingFilesAtom, useAttachFile, useRemoveFile, FileItemType, type PreparingFile } from './useFileInput'
+import { uploadingFilesAtom, uploadedFilesAtom, preparingFilesAtom, useAttachFile, useAttachSystemFiles, useRemoveFile, FileItemType, type PreparingFile } from './useFileInput'
 import { Button } from '@components/ui/button'
 import { FileImage } from '@components/common/FileImage'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@components/ui/tooltip'
-import { AlertCircleIcon, Paperclip, Trash2Icon } from 'lucide-react'
+import { AlertCircleIcon, Trash2Icon } from 'lucide-react'
+import { AttachFileButton } from '../attach-picker/AttachFileButton'
 import { useCallback, useMemo, useRef } from 'react'
 import FileTypeIcon from '@components/common/FileIcons/FileTypeIcon'
 import { formatBytes, getFileExtension } from '@raven/lib/utils/operations'
@@ -171,35 +172,12 @@ const FileItem = ({ file, onRemove, onPreview }: { file: FileItemType, onRemove:
 }
 
 export const AddFileButton = ({ channelID, onAfterAttach }: { channelID: string; onAfterAttach?: () => void }) => {
-
-    const fileInputRef = useRef<HTMLInputElement>(null)
-
     const onAddFile = useAttachFile(channelID)
+    const onAddSystemFiles = useAttachSystemFiles(channelID)
 
-    const onClick = () => {
-        fileInputRef.current?.click()
-    }
-
-    return <>
-        <input type="file" multiple
-            ref={fileInputRef}
-            onChange={(e) => {
-                const files = e.target.files
-                if (files) {
-                    onAddFile(files)
-                }
-                // Reset so re-picking the same file fires onChange again.
-                e.target.value = ''
-                // The file dialog stole focus — hand it back to the composer.
-                onAfterAttach?.()
-            }} className='hidden' />
-        <Tooltip>
-            <TooltipTrigger asChild>
-                <Button variant="ghost" size="sm" isIconButton onClick={onClick} type='button' aria-label={_("Attach file")}>
-                    <Paperclip />
-                </Button>
-            </TooltipTrigger>
-            <TooltipContent>{_("Attach file")}</TooltipContent>
-        </Tooltip>
-    </>
+    // The dialog stole focus — hand it back to the composer after anything is attached.
+    return <AttachFileButton
+        onUploadFiles={(files) => { onAddFile(files); onAfterAttach?.() }}
+        onPickSystemFiles={(files) => { onAddSystemFiles(files); onAfterAttach?.() }}
+    />
 }

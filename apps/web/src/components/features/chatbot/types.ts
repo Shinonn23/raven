@@ -1,0 +1,9 @@
+export type ChatbotProject = { name: string; title: string }
+export type ChatbotChatSummary = { name: string; title: string; project: string | null; modified: string; owner: string }
+export type ChatbotAttachment = { file_url: string; file_name: string }
+export type ChatbotDocument = { doctype: string; docname: string }
+export type ChatbotMessage = { role: "user" | "assistant"; content: string; creation?: string; owner?: string; files?: ChatbotAttachment[]; document?: ChatbotDocument | null }
+export type ChatbotChat = { name: string; title: string; project: string | null; owner: string; can_write: boolean; messages: ChatbotMessage[] }
+export type ChatbotSkill = { name: string; title: string; command: string; prompt: string; is_company: 0 | 1 }
+export type ChatbotOutgoingMessage = { text: string; files: ChatbotAttachment[]; document: ChatbotDocument | null; model?: string; effort?: string }
+export type ChatbotShare = { user: string; read: 0 | 1; write: 0 | 1 }
