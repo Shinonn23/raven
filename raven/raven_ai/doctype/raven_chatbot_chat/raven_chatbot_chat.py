@@ -3,6 +3,7 @@ from agents.exceptions import MaxTurnsExceeded
 from frappe import _
 from frappe.model.document import Document
 
+from raven.ai.chat_title import placeholder
 from raven.ai.chatbot_context import build_prompt, image_inputs, validate_attachments
 from raven.ai.chatbot_models import ChatbotChoice, resolve_choice
 from raven.ai.chatbot_stream import DeltaPublisher, stream_reply
@@ -10,7 +11,6 @@ from raven.raven_ai.doctype.raven_chatbot_document_usage.raven_chatbot_document_
 	RavenChatbotDocumentUsage,
 )
 
-TITLE_MAX_LENGTH = 40
 REPLY_TIMEOUT_SECONDS = 600
 
 
@@ -21,6 +21,16 @@ class RavenChatbotChat(Document):
 		if document:
 			return f"{document['doctype']} {document['docname']}"
 		return files[0].get("file_name") or "" if files else ""
+
+	def queue_naming(self, text: str, model: str):
+		frappe.enqueue(
+			"raven.ai.chat_title.name_chat",
+			queue="short",
+			enqueue_after_commit=True,
+			chat=self.name,
+			text=text,
+			model=model,
+		)
 
 	def add_user_message(
 		self,
@@ -47,9 +57,12 @@ class RavenChatbotChat(Document):
 				"link_document": document and document["docname"],
 			},
 		)
-		if not self.title:
-			self.title = (text or self.attachment_title(files, document)).strip().replace("\n", " ")[:TITLE_MAX_LENGTH]
+		is_first_message = not self.title
+		if is_first_message:
+			self.title = placeholder()
 		self.save()
+		if is_first_message:
+			self.queue_naming(text or self.attachment_title(files, document), choice.model)
 
 		frappe.enqueue(
 			"raven.raven_ai.doctype.raven_chatbot_chat.raven_chatbot_chat.reply",

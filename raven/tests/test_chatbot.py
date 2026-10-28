@@ -9,6 +9,7 @@ from frappe.tests import IntegrationTestCase
 
 from raven.ai import chatbot_stream
 from raven.ai.chatbot_models import ChatbotChoice, resolve_choice
+from raven.ai.chat_title import name_chat
 from raven.ai.chatbot_context import file_context, image_inputs
 from raven.ai.manual_sources import ManualSource, configured_sources
 from raven.ai.manual_tools import (
@@ -49,9 +50,11 @@ def run_now(method, queue=None, timeout=None, enqueue_after_commit=None, **kwarg
 
 
 @contextmanager
-def bot_answers(answer="Hello from the bot"):
-	"""The bot streams `answer`; background jobs run inline so the test sees the saved reply."""
-	with patch(STREAM, return_value=answer) as stream, patch("frappe.enqueue", side_effect=run_now):
+def bot_answers(answer="Hello from the bot", title="A chat title"):
+	"""The bot streams `answer` and names the chat `title`; background jobs run inline so the test sees the saved reply."""
+	with patch(STREAM, return_value=answer) as stream, patch("raven.ai.chat_title.suggest_title", return_value=title), patch(
+		"frappe.enqueue", side_effect=run_now
+	):
 		yield stream
 
 
@@ -113,7 +116,8 @@ class TestChatbot(IntegrationTestCase):
 		with bot_answers() as ask_agent:
 			chat = send_message("What is the status of order 5?")
 
-		self.assertEqual(chat["title"], "What is the status of order 5?")
+		self.assertEqual(chat["title"], "New chat")
+		self.assertEqual(get_chat(chat["name"])["title"], "A chat title")
 		self.assertEqual([m["role"] for m in chat["messages"]], ["user"])
 		saved = get_chat(chat["name"])
 		self.assertEqual([m["role"] for m in saved["messages"]], ["user", "assistant"])
@@ -141,6 +145,28 @@ class TestChatbot(IntegrationTestCase):
 		self.assertEqual(overview["projects"][0]["title"], "Reports")
 		self.assertEqual(overview["chats"][0]["project"], project.name)
 		self.assertEqual(overview["chats"][0]["name"], chat["name"])
+
+	def test_the_ai_names_a_chat_only_from_its_first_message(self):
+		with bot_answers(title="Order status") as ask_agent, patch("raven.ai.chat_title.suggest_title", return_value="Order status") as namer:
+			chat = send_message("What is the status of order 5?")
+			send_message("and order 6?", chat=chat["name"])
+		self.assertEqual(namer.call_count, 1)
+		self.assertEqual(namer.call_args.args[0], "What is the status of order 5?")
+		self.assertEqual(get_chat(chat["name"])["title"], "Order status")
+
+	def test_a_renamed_chat_keeps_its_name(self):
+		with patch("frappe.enqueue"):
+			chat = send_message("first question")
+		frappe.db.set_value("Raven Chatbot Chat", chat["name"], "title", "My own name")
+		name_chat(chat["name"], "first question", "gpt-5")
+		self.assertEqual(get_chat(chat["name"])["title"], "My own name")
+
+	def test_when_the_ai_cannot_name_a_chat_the_question_is_its_title(self):
+		with patch("frappe.enqueue"):
+			chat = send_message("What is the status of order 5?")
+		with patch("raven.ai.chat_title.suggest_title", side_effect=RuntimeError("down")), patch("frappe.log_error"):
+			name_chat(chat["name"], "What is the status of order 5?", "gpt-5")
+		self.assertEqual(get_chat(chat["name"])["title"], "What is the status of order 5?")
 
 	def test_empty_message_is_rejected(self):
 		self.assertRaises(frappe.ValidationError, send_message, "   ")
@@ -185,7 +211,7 @@ class TestChatbotAttachmentsAndSkills(TestChatbot):
 			chat = send_message("", document={"doctype": "Note", "docname": note.name})
 
 		self.assertEqual(chat["messages"][0]["content"], "")
-		self.assertEqual(chat["title"], f"Note {note.name}"[:40])
+		self.assertEqual(get_chat(chat["name"])["title"], "A chat title")
 		prompt = ask_agent.call_args_list[0].args[0]
 		self.assertIn("without writing a message", prompt)
 		self.assertIn("launch plan", prompt)
