@@ -47,19 +47,19 @@ def _questions(chat: str) -> list[dict]:
 	return frappe.get_list(
 		"Raven AI Question",
 		filters={"chat": chat},
-		fields=["name", "question", "options", "status", "answer", "message_position"],
+		fields=["name", "questions", "status", "answers", "message_position"],
 		order_by="creation asc",
 	)
 
 
 @frappe.whitelist(methods=["POST"])
-def answer_question(question: str, answer: str, model: str | None = None, effort: str | None = None) -> dict:
-	"""Answer a question of the AI. The answer is also sent as the user's next message, so the AI carries on from it."""
+def answer_question(question: str, answers: list[str], model: str | None = None, effort: str | None = None) -> dict:
+	"""Answer the questions of the AI, one answer each. They are sent as the user's next message, so the AI carries on from them."""
 	asked = frappe.get_doc("Raven AI Question", question)
 	asked.check_permission("write")
 	chat = frappe.get_doc("Raven Chatbot Chat", asked.chat)
 	chat.check_permission("write")
-	chat.add_user_message(asked.answer_with(answer), model=model, effort=effort, reply_to=asked.question)
+	chat.add_user_message(asked.answer_with(answers), model=model, effort=effort)
 	return _serialize_chat(chat)
 
 

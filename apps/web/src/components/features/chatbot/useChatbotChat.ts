@@ -83,7 +83,7 @@ export const useDecideChatbotAction = (chatId: string) => {
     return { decide, busy }
 }
 
-/** Answer a question of the AI with a choice or the user's own words. The answer becomes their next message and the AI carries on. */
+/** Send the answers to a set of questions of the AI. They become the user's next message and the AI carries on. */
 export const useAnswerChatbotQuestion = (chatId: string) => {
     const { call } = useFrappePostCall<{ message: ChatbotChat }>("raven.api.chatbot.answer_question")
     const { mutate } = useSWRConfig()
@@ -92,10 +92,10 @@ export const useAnswerChatbotQuestion = (chatId: string) => {
     const setStreams = useSetAtom(chatbotStreamsAtom)
     const [busy, setBusy] = useState(false)
 
-    const answer = async (question: string, text: string) => {
+    const answer = async (question: string, answers: string[]) => {
         setBusy(true)
         try {
-            const { message: chat } = await call({ question, answer: text, model: choice?.model, effort: choice?.effort })
+            const { message: chat } = await call({ question, answers, model: choice?.model, effort: choice?.effort })
             setStreams((streams) => ({ ...streams, [chatId]: "" }))
             await mutate(chatKey(chatId), { message: chat }, { revalidate: false })
             await refresh()

@@ -39,14 +39,12 @@ class RavenChatbotChat(Document):
 		document: dict | None = None,
 		model: str | None = None,
 		effort: str | None = None,
-		reply_to: str | None = None,
 	):
-		"""Save the user's message (checking they may read what they attached) and queue the chatbot's reply.
-		`reply_to` is the question of the AI that this message answers; the AI sees it, the chat shows only the answer."""
+		"""Save the user's message (checking they may read what they attached) and queue the chatbot's reply."""
 		choice = resolve_choice(model, effort)
 		files = files or []
 		validate_attachments(files, document)
-		prompt = build_prompt(text, files, document, reply_to)
+		prompt = build_prompt(text, files, document)
 		history = [{"role": message.role, "content": message.content} for message in self.messages]
 
 		self.append(

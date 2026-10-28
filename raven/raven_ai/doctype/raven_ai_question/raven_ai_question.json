@@ -13,10 +13,9 @@
  "field_order": [
   "chat",
   "message_position",
-  "question",
-  "options",
+  "questions",
   "status",
-  "answer"
+  "answers"
  ],
  "fields": [
   {
@@ -34,17 +33,11 @@
    "read_only": 1
   },
   {
-   "fieldname": "question",
-   "fieldtype": "Small Text",
-   "label": "Question",
-   "reqd": 1,
-   "read_only": 1
-  },
-  {
-   "fieldname": "options",
+   "fieldname": "questions",
    "fieldtype": "Code",
-   "label": "Options",
+   "label": "Questions",
    "options": "JSON",
+   "reqd": 1,
    "read_only": 1
   },
   {
@@ -58,9 +51,10 @@
    "read_only": 1
   },
   {
-   "fieldname": "answer",
-   "fieldtype": "Small Text",
-   "label": "Answer",
+   "fieldname": "answers",
+   "fieldtype": "Code",
+   "label": "Answers",
+   "options": "JSON",
    "read_only": 1
   }
  ],

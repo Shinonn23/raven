@@ -320,51 +320,62 @@ class TestChatbotPictures(TestChatbot):
 
 
 class TestChatbotQuestions(TestChatbot):
-	"""The AI asks the user a question; the answer comes back as the user's next message."""
+	"""The AI asks the user questions; all the answers come back as the user's next message."""
 
 	__test__ = True
+	QUESTIONS = [
+		{"question": "Which field?", "options": ["Assigned To", "Owner"]},
+		{"question": "Which tags?", "options": ["a", "b"], "multiple": True},
+	]
 
-	def ask(self, chat, options=("Assigned To", "Owner")):
-		return ask(chat, "Which field should I put them in?", list(options))
+	def asked(self, chat, questions=None):
+		ask(chat, questions or self.QUESTIONS)
+		return get_chat(chat)["questions"]
 
-	def test_a_question_is_shown_once_with_its_choices_and_position(self):
+	def test_questions_show_once_as_one_card_with_choices_and_position(self):
 		with bot_answers():
 			chat = send_message("assign it")["name"]
-		self.ask(chat)
-		self.ask(chat)
-		questions = get_chat(chat)["questions"]
-		self.assertEqual(len(questions), 1)
-		self.assertEqual((json.loads(questions[0]["options"]), questions[0]["message_position"]), (["Assigned To", "Owner"], 2))
+		self.asked(chat)
+		card = self.asked(chat)
+		self.assertEqual(len(card), 1)
+		self.assertEqual(card[0]["message_position"], 2)
+		self.assertEqual([(q["question"], q["options"], q["multiple"]) for q in json.loads(card[0]["questions"])], [("Which field?", ["Assigned To", "Owner"], False), ("Which tags?", ["a", "b"], True)])
 
-	def test_options_are_trimmed_and_limited(self):
+	def test_questions_and_choices_are_limited_and_trimmed(self):
 		with bot_answers():
 			chat = send_message("x")["name"]
-		self.ask(chat, [" A ", "", "B", "C", "D", "E", "F", "G"])
-		self.assertEqual(json.loads(get_chat(chat)["questions"][0]["options"]), ["A", "B", "C", "D", "E", "F"])
+		many = [{"question": f" Q{n} ", "options": [" A ", "", "B", "C", "D", "E", "F", "G"]} for n in range(6)] + [{"question": "  "}]
+		stored = json.loads(self.asked(chat, many)[0]["questions"])
+		self.assertEqual(len(stored), 4)
+		self.assertEqual((stored[0]["question"], stored[0]["options"]), ("Q0", ["A", "B", "C", "D", "E", "F"]))
 
-	def test_the_answer_is_sent_as_the_next_message_and_the_ai_sees_the_question(self):
+	def test_asking_nothing_is_refused(self):
+		with bot_answers():
+			chat = send_message("x")["name"]
+		self.assertRaises(frappe.ValidationError, ask, chat, [{"question": " "}])
+
+	def test_all_answers_go_as_one_message_the_ai_can_read(self):
 		with bot_answers() as ask_agent:
 			chat = send_message("assign it")["name"]
-			self.ask(chat)
-			question = get_chat(chat)["questions"][0]["name"]
-			result = answer_question(question, "Assigned To")
+			question = self.asked(chat)[0]["name"]
+			result = answer_question(question, ["Assigned To", "a, b"])
 
-		self.assertEqual([m["content"] for m in result["messages"] if m["role"] == "user"], ["assign it", "Assigned To"])
-		prompt = ask_agent.call_args_list[-1].args[0]
-		self.assertIn("Which field should I put them in?", prompt)
-		self.assertTrue(prompt.rstrip().endswith("Assigned To"))
-		self.assertEqual([(q["status"], q["answer"]) for q in get_chat(chat)["questions"]], [("Answered", "Assigned To")])
+		sent = [m["content"] for m in result["messages"] if m["role"] == "user"]
+		self.assertEqual(sent, ["assign it", "- Which field?: Assigned To\n- Which tags?: a, b"])
+		self.assertIn("Which field?", ask_agent.call_args_list[-1].args[0])
+		saved = get_chat(chat)["questions"][0]
+		self.assertEqual((saved["status"], json.loads(saved["answers"])), ("Answered", ["Assigned To", "a, b"]))
 
-	def test_a_question_is_answered_once_and_only_by_its_owner(self):
+	def test_every_question_needs_an_answer_once_and_only_from_its_owner(self):
 		with bot_answers():
 			chat = send_message("x")["name"]
-			self.ask(chat)
-			question = get_chat(chat)["questions"][0]["name"]
-			self.assertRaises(frappe.ValidationError, answer_question, question, "   ")
-			answer_question(question, "my own words")
-			self.assertRaises(frappe.ValidationError, answer_question, question, "again")
+			question = self.asked(chat)[0]["name"]
+			self.assertRaises(frappe.ValidationError, answer_question, question, ["only one"])
+			self.assertRaises(frappe.ValidationError, answer_question, question, ["A", "  "])
+			answer_question(question, ["A", "my own words"])
+			self.assertRaises(frappe.ValidationError, answer_question, question, ["A", "again"])
 		frappe.set_user(STRANGER)
-		self.assertRaises(frappe.PermissionError, answer_question, question, "mine")
+		self.assertRaises(frappe.PermissionError, answer_question, question, ["A", "B"])
 
 
 class TestChatbotSharing(TestChatbot):
