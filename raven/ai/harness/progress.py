@@ -22,6 +22,9 @@ def harness_status(tool_name: str, arguments: str) -> str | None:
 		"preview_document": lambda: _("Checking the {0} before saving…").format(doctype),
 		"save_draft": lambda: _("Saving a draft of {0}…").format(doctype),
 		"open_prefilled_form": lambda: _("Preparing a {0} form…").format(doctype),
-		"ask_user_to_approve": lambda: _("Asking you to approve: {0} {1}").format(args.get("action", ""), doctype),
+		"submit_document": lambda: _("Asking you to approve: Submit {0}").format(doctype),
+		"cancel_document": lambda: _("Asking you to approve: Cancel {0}").format(doctype),
+		"delete_documents": lambda: _("Asking you to approve: Delete {0}").format(doctype),
+		"update_documents": lambda: _("Asking you to approve: Update {0}").format(doctype),
 	}
 	return lines[tool_name]() if tool_name in lines else None

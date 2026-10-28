@@ -3,6 +3,7 @@ import json
 from types import SimpleNamespace
 
 import frappe
+from agents.tool_context import ToolContext
 from frappe.tests import IntegrationTestCase
 
 from raven.ai.chatbot_models import ChatbotChoice
@@ -11,7 +12,7 @@ from raven.ai.harness.action_log_hooks import ActionLogHooks
 from raven.ai.chatbot_stream import progress_reporter
 from raven.ai.harness.progress import harness_status
 from raven.ai.harness.document_drafts import DocumentDraft
-from raven.ai.harness.document_tools import request_approval
+from raven.ai.harness.document_tools import document_tools, request_approval
 from raven.api.chatbot import get_chat
 from raven.ai.harness.data_tools import MAX_OUTPUT_CHARACTERS, answer, data_tools
 
@@ -146,7 +147,7 @@ class TestDocuments(IntegrationTestCase):
 		self.assertEqual(link, "/app/todo/new?description=A%20b")
 
 	def ask(self, action, names, values=None):
-		request_approval(self.chat.name, action, "ToDo", names, values, "Do it")
+		request_approval(self.chat.name, action, "ToDo", names, values)
 		return frappe.get_last_doc("Raven AI Pending Action")
 
 	def test_asking_changes_nothing_until_approved(self):
@@ -190,7 +191,7 @@ class TestDocuments(IntegrationTestCase):
 		todo = self.todo()
 		frappe.set_user("test1@example.com")
 		with self.assertRaises(frappe.PermissionError):
-			request_approval(self.chat.name, "Delete", "ToDo", [todo.name], None, "x")
+			request_approval(self.chat.name, "Delete", "ToDo", [todo.name])
 
 	def test_chat_lists_waiting_cards(self):
 		self.ask("Delete", [self.todo().name])
@@ -206,9 +207,9 @@ class TestProgressLines(IntegrationTestCase):
 
 	def test_each_tool_has_a_line_and_unknown_ones_none(self):
 		args = json.dumps({"doctype": "ToDo", "action": "Delete", "report_name": "Accounts Receivable", "name": "T1"})
-		for tool in ("describe_doctype", "get_document", "run_report", "preview_document", "save_draft", "open_prefilled_form", "ask_user_to_approve"):
+		for tool in ("describe_doctype", "get_document", "run_report", "preview_document", "save_draft", "open_prefilled_form", "submit_document", "cancel_document", "delete_documents", "update_documents"):
 			self.assertTrue(harness_status(tool, args), tool)
-		self.assertEqual(harness_status("ask_user_to_approve", args), "Asking you to approve: Delete ToDo")
+		self.assertEqual(harness_status("delete_documents", args), "Asking you to approve: Delete ToDo")
 		self.assertIsNone(harness_status("something_else", args))
 		self.assertIsNone(harness_status("list_documents", "not json"))
 
@@ -220,3 +221,31 @@ class TestProgressLines(IntegrationTestCase):
 		asyncio.run(progress_reporter(publisher)(event))
 		asyncio.run(progress_reporter(publisher)({"event": SimpleNamespace(type="raw_response_event"), "agent": None}))
 		self.assertEqual(lines, ["Saving a draft of ToDo…"])
+
+
+class TestHeldByTheHarness(IntegrationTestCase):
+	"""The tools for hard-to-undo changes never do the work, whatever the AI passes to them."""
+
+	def setUp(self):
+		frappe.set_user("Administrator")
+		self.chat = frappe.get_doc({"doctype": "Raven Chatbot Chat", "title": "Held"}).insert()
+		self.todo = frappe.get_doc({"doctype": "ToDo", "description": "Keep me"}).insert()
+
+	def call(self, name, **arguments):
+		tool = next(tool for tool in document_tools(self.chat.name) if tool.name == name)
+		text = json.dumps(arguments)
+		return asyncio.run(tool.on_invoke_tool(ToolContext(context=None, tool_name=name, tool_call_id="call", tool_arguments=text), text))
+
+	def test_delete_and_update_only_make_cards(self):
+		for name, arguments in (
+			("delete_documents", {"doctype": "ToDo", "names": [self.todo.name]}),
+			("update_documents", {"doctype": "ToDo", "names": [self.todo.name], "values": {"priority": "High"}}),
+		):
+			self.assertFalse(json.loads(self.call(name, **arguments))["done"])
+		self.assertEqual(frappe.db.get_value("ToDo", self.todo.name, "priority"), "Medium")
+		cards = get_chat(self.chat.name)["actions"]
+		self.assertEqual([(card["action"], card["summary"]) for card in cards], [("Delete", ""), ("Update many", "priority = High")])
+
+	def test_the_card_text_comes_from_the_real_values(self):
+		self.call("update_documents", doctype="ToDo", names=[self.todo.name], values={"priority": "High", "owner": "x@example.com"})
+		self.assertEqual(get_chat(self.chat.name)["actions"][0]["summary"], "priority = High")

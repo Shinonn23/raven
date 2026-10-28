@@ -1,21 +1,25 @@
-"""The tools that let the AI prepare documents for the user. It can check and save drafts and open a filled form; everything that
-is hard to undo (submit, cancel, delete, changing many documents) only becomes a card the user must approve in the chat."""
+"""The tools that let the AI work on documents. Drafts it saves itself. Submit, cancel, delete and updating existing documents are
+held by the harness, whatever the AI says: the tool only puts a card in the chat, and the work happens when the user approves it."""
 
 import json
-from typing import Literal
-
 import frappe
 from agents import FunctionTool, function_tool
 
-from raven.ai.harness.approved_actions import MAX_DOCUMENTS
+from raven.ai.harness.approved_actions import MAX_DOCUMENTS, editable
 from raven.ai.harness.data_tools import answer
 from raven.ai.harness.document_drafts import DocumentDraft
 
 PERMISSION_FOR = {"Submit": "submit", "Cancel": "cancel", "Delete": "delete", "Update many": "write"}
 
 
-def request_approval(chat: str | None, action: str, doctype: str, names: list[str], values: dict | None, summary: str) -> dict:
-	"""Put a card in the chat. The documents must exist and be allowed for the user now; the work happens only when they approve."""
+def summarize(values: dict | None) -> str:
+	"""What an "Update many" card shows the user, written by the system from the real values, not by the AI."""
+	return ", ".join(f"{field} = {value}" for field, value in editable(values or {}).items())
+
+
+def request_approval(chat: str | None, action: str, doctype: str, names: list[str], values: dict | None = None) -> dict:
+	"""Hold the change for the user: it shows as a card in the chat and happens only when they approve it. The documents must
+	exist and be allowed for the user now."""
 	if not names or len(names) > MAX_DOCUMENTS:
 		frappe.throw(f"Give between 1 and {MAX_DOCUMENTS} documents.")
 	for name in names:
@@ -28,10 +32,10 @@ def request_approval(chat: str | None, action: str, doctype: str, names: list[st
 			"reference_doctype": doctype,
 			"names": json.dumps(names),
 			"values": json.dumps(values or {}, ensure_ascii=False),
-			"summary": summary,
+			"summary": summarize(values),
 		}
 	).insert()
-	return {"status": "waiting", "note": "The user has been asked. Tell them what you asked to do; do not assume it is done."}
+	return {"done": False, "status": "waiting for the user's decision"}
 
 
 def document_tools(chat: str | None) -> list[FunctionTool]:
@@ -64,21 +68,24 @@ def document_tools(chat: str | None) -> list[FunctionTool]:
 	def open_prefilled_form(doctype: str, values: dict) -> str:
 		return answer(lambda: drafts.prefilled_link(doctype, values))
 
+	@function_tool(strict_mode=False, name_override="submit_document", description_override="Submit a draft document.")
+	def submit_document(doctype: str, name: str) -> str:
+		return answer(lambda: request_approval(chat, "Submit", doctype, [name]))
+
+	@function_tool(strict_mode=False, name_override="cancel_document", description_override="Cancel a submitted document.")
+	def cancel_document(doctype: str, name: str) -> str:
+		return answer(lambda: request_approval(chat, "Cancel", doctype, [name]))
+
+	@function_tool(strict_mode=False, name_override="delete_documents", description_override="Delete documents (up to 200).")
+	def delete_documents(doctype: str, names: list[str]) -> str:
+		return answer(lambda: request_approval(chat, "Delete", doctype, names))
+
 	@function_tool(
 		strict_mode=False,
-		name_override="ask_user_to_approve",
-		description_override=(
-			"For anything hard to undo: Submit, Cancel, Delete, or Update many (the same `values` on up to 200 documents). This does NOT do it: "
-			"it shows the user a card to approve or reject. `summary` says in one plain sentence what will happen."
-		),
+		name_override="update_documents",
+		description_override="Set the same field values on existing documents (up to 200), submitted or not.",
 	)
-	def ask_user_to_approve(
-		action: Literal["Submit", "Cancel", "Delete", "Update many"],
-		doctype: str,
-		names: list[str],
-		summary: str,
-		values: dict | None = None,
-	) -> str:
-		return answer(lambda: request_approval(chat, action, doctype, names, values, summary))
+	def update_documents(doctype: str, names: list[str], values: dict) -> str:
+		return answer(lambda: request_approval(chat, "Update many", doctype, names, values))
 
-	return [preview_document, save_draft, open_prefilled_form, ask_user_to_approve]
+	return [preview_document, save_draft, open_prefilled_form, submit_document, cancel_document, delete_documents, update_documents]

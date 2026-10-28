@@ -44,8 +44,8 @@ DATA_TOOL_DESCRIPTION = (
 )
 DOCUMENT_TOOL_NAME = "document_assistant"
 DOCUMENT_TOOL_DESCRIPTION = (
-	"Prepares documents for the user: checks values the way saving would, saves drafts, opens a filled form, and asks the user to approve "
-	"anything hard to undo (submit, cancel, delete, bulk change). It can also check data. Give it the whole task in one call, including finding the documents; it looks them up itself."
+	"Works on documents for the user: checks values the way saving would, saves drafts, opens a filled form, and submits, cancels, deletes "
+	"or updates documents. It can also check data. Give it the whole task in one call, including finding the documents; it looks them up itself."
 )
 HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 

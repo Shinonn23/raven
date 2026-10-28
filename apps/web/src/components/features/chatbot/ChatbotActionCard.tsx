@@ -20,7 +20,7 @@ export const ChatbotActionCard = ({ chatId, action }: ChatbotActionCardProps) =>
                 <ShieldQuestionIcon className="size-4 text-ink-amber-3" />
                 {_("{0} {1}", [action.action, action.reference_doctype])}
             </div>
-            <p className="text-p-sm text-ink-gray-7">{action.summary}</p>
+            {action.summary && <p className="text-p-sm text-ink-gray-7">{action.summary}</p>}
             <p className="break-words text-xs text-ink-gray-5">{names.slice(0, 5).join(", ")}{names.length > 5 ? _(" and {0} more", [String(names.length - 5)]) : ""}</p>
             <div className="flex gap-2">
                 <Button size="sm" disabled={loading} onClick={() => decide(action.name, true)}>{_("Approve")}</Button>
