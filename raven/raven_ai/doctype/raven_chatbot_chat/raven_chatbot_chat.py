@@ -3,7 +3,7 @@ from agents.exceptions import MaxTurnsExceeded
 from frappe import _
 from frappe.model.document import Document
 
-from raven.ai.chat_title import placeholder
+from raven.ai.chat_title import placeholder, title_for
 from raven.ai.chatbot_context import build_prompt, image_inputs, validate_attachments
 from raven.ai.chatbot_models import ChatbotChoice, resolve_choice
 from raven.ai.chatbot_stream import DeltaPublisher, stream_reply
@@ -21,16 +21,6 @@ class RavenChatbotChat(Document):
 		if document:
 			return f"{document['doctype']} {document['docname']}"
 		return files[0].get("file_name") or "" if files else ""
-
-	def queue_naming(self, text: str, model: str):
-		frappe.enqueue(
-			"raven.ai.chat_title.name_chat",
-			queue="short",
-			enqueue_after_commit=True,
-			chat=self.name,
-			text=text,
-			model=model,
-		)
 
 	def add_user_message(
 		self,
@@ -61,8 +51,6 @@ class RavenChatbotChat(Document):
 		if is_first_message:
 			self.title = placeholder()
 		self.save()
-		if is_first_message:
-			self.queue_naming(text or self.attachment_title(files, document), choice.model)
 
 		frappe.enqueue(
 			"raven.raven_ai.doctype.raven_chatbot_chat.raven_chatbot_chat.reply",
@@ -72,6 +60,7 @@ class RavenChatbotChat(Document):
 			chat=self.name,
 			prompt=prompt,
 			files=files,
+			title_from=(text or self.attachment_title(files, document)) if is_first_message else None,
 			history=history,
 			model=choice.model,
 			effort=choice.effort,
@@ -80,9 +69,18 @@ class RavenChatbotChat(Document):
 			RavenChatbotDocumentUsage.record(document["doctype"], document["docname"])
 
 
-def reply(chat: str, prompt: str, history: list[dict], model: str, effort: str | None = None, files: list[dict] | None = None):
-	"""Background job: stream the bot's answer to the user's browser, then save it as the assistant message."""
-	doc = frappe.get_doc("Raven Chatbot Chat", chat)
+def reply(
+	chat: str,
+	prompt: str,
+	history: list[dict],
+	model: str,
+	effort: str | None = None,
+	files: list[dict] | None = None,
+	title_from: str | None = None,
+):
+	"""Background job: stream the bot's answer to the user's browser, then save it as the assistant message.
+	`title_from` is the first message of a new chat, which the AI names here. The chat is written once, at the end and by this job alone:
+	the database refuses a write to a row that someone else changed during a long job, and the user must always be told it finished."""
 	failed = False
 	try:
 		answer = stream_reply(prompt, history, DeltaPublisher(chat), ChatbotChoice(model, effort), image_inputs(files or []))
@@ -94,8 +92,18 @@ def reply(chat: str, prompt: str, history: list[dict], model: str, effort: str |
 		answer = _("Sorry, I could not answer that. Please try again.")
 		failed = True
 
-	doc.reload()
+	try:
+		save_answer(chat, answer, model, title_from)
+	except Exception:
+		frappe.log_error(title="Chatbot answer could not be saved")
+		failed = True
+	frappe.publish_realtime("chatbot_done", {"chat": chat, "failed": failed}, user=frappe.session.user, after_commit=True)
+
+
+def save_answer(chat: str, answer: str, model: str, title_from: str | None):
+	doc = frappe.get_doc("Raven Chatbot Chat", chat)
+	if title_from and doc.title == placeholder():
+		doc.title = title_for(title_from, model)
 	doc.append("messages", {"role": "assistant", "content": answer})
 	doc.flags.ignore_permissions = True
 	doc.save()
-	frappe.publish_realtime("chatbot_done", {"chat": chat, "failed": failed}, user=frappe.session.user)

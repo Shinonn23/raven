@@ -9,7 +9,6 @@ from frappe.tests import IntegrationTestCase
 
 from raven.ai import chatbot_stream
 from raven.ai.chatbot_models import ChatbotChoice, resolve_choice
-from raven.ai.chat_title import name_chat
 from raven.ai.chatbot_context import file_context, image_inputs
 from raven.ai.manual_sources import ManualSource, configured_sources
 from raven.ai.manual_tools import (
@@ -29,6 +28,7 @@ from raven.ai.chatbot_stream import (
 )
 from raven.api.upload_file import get_attachable_files
 from raven.ai.harness.question_tools import ask
+from raven.raven_ai.doctype.raven_chatbot_chat.raven_chatbot_chat import reply
 from raven.api.chatbot import (
 	answer_question,
 	get_chat_shares,
@@ -160,15 +160,24 @@ class TestChatbot(IntegrationTestCase):
 		with patch("frappe.enqueue"):
 			chat = send_message("first question")
 		frappe.db.set_value("Raven Chatbot Chat", chat["name"], "title", "My own name")
-		name_chat(chat["name"], "first question", "gpt-5")
+		with patch(STREAM, return_value="ok"), patch("raven.ai.chat_title.suggest_title", return_value="AI name"):
+			reply(chat["name"], "first question", [], "gpt-5", title_from="first question")
 		self.assertEqual(get_chat(chat["name"])["title"], "My own name")
 
 	def test_when_the_ai_cannot_name_a_chat_the_question_is_its_title(self):
 		with patch("frappe.enqueue"):
 			chat = send_message("What is the status of order 5?")
-		with patch("raven.ai.chat_title.suggest_title", side_effect=RuntimeError("down")), patch("frappe.log_error"):
-			name_chat(chat["name"], "What is the status of order 5?", "gpt-5")
+		with patch(STREAM, return_value="ok"), patch("raven.ai.chat_title.suggest_title", side_effect=RuntimeError("down")), patch("frappe.log_error"):
+			reply(chat["name"], "What is the status of order 5?", [], "gpt-5", title_from="What is the status of order 5?")
 		self.assertEqual(get_chat(chat["name"])["title"], "What is the status of order 5?")
+
+	def test_the_user_is_told_it_finished_even_when_the_answer_cannot_be_saved(self):
+		with patch("frappe.enqueue"):
+			chat = send_message("question")
+		with patch(STREAM, return_value="ok"), patch("raven.raven_ai.doctype.raven_chatbot_chat.raven_chatbot_chat.save_answer", side_effect=RuntimeError("1020")), patch("frappe.log_error"), patch("frappe.publish_realtime") as publish:
+			reply(chat["name"], "question", [], "gpt-5")
+		publish.assert_called_once()
+		self.assertEqual((publish.call_args.args[0], publish.call_args.args[1]["failed"]), ("chatbot_done", True))
 
 	def test_empty_message_is_rejected(self):
 		self.assertRaises(frappe.ValidationError, send_message, "   ")
@@ -452,7 +461,7 @@ class TestChatbotStreaming(TestChatbot):
 		messages = get_chat(chat["name"])["messages"]
 		self.assertEqual(messages[-1]["role"], "assistant")
 		self.assertIn("could not answer", messages[-1]["content"])
-		publish.assert_called_with("chatbot_done", {"chat": chat["name"], "failed": True}, user=OWNER)
+		publish.assert_called_with("chatbot_done", {"chat": chat["name"], "failed": True}, user=OWNER, after_commit=True)
 
 	def test_text_is_published_in_batches_to_the_asking_user(self):
 		from raven.ai.chatbot_stream import DeltaPublisher
@@ -885,4 +894,4 @@ class TestManualAssistant(TestChatbotOrchestrator):
 		) as publish:
 			chat = send_message("do everything")
 		self.assertIn("more steps", get_chat(chat["name"])["messages"][-1]["content"])
-		publish.assert_called_with("chatbot_done", {"chat": chat["name"], "failed": True}, user=OWNER)
+		publish.assert_called_with("chatbot_done", {"chat": chat["name"], "failed": True}, user=OWNER, after_commit=True)

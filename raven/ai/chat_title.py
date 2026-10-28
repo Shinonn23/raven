@@ -1,4 +1,4 @@
-"""The name of a chat is written by the AI from the first message, a moment after the chat starts."""
+"""The name of a chat is written by the AI from its first message, and saved together with the first answer."""
 
 import asyncio
 
@@ -29,18 +29,11 @@ def suggest_title(text: str, model: str) -> str:
 	return " ".join(str(result.final_output or "").split()).strip("\"'“”‘’ .")[:MAX_LENGTH]
 
 
-def name_chat(chat: str, text: str, model: str):
-	"""Background job: give the chat its AI title, unless someone has already renamed it. If the AI cannot, the question is the title."""
-	doc = frappe.get_doc("Raven Chatbot Chat", chat)
-	doc.check_permission("write")
-	if doc.title != placeholder():
-		return
+def title_for(text: str, model: str) -> str:
+	"""The title of a chat that starts with `text`. If the AI cannot name it, the question is the title."""
 	try:
 		title = suggest_title(text, model)
 	except Exception:
 		frappe.log_error(title="Chatbot could not name a chat")
 		title = ""
-	title = title or " ".join(text.split())[:FALLBACK_LENGTH]
-	# Written directly so that it never clashes with the answer being saved into the same chat.
-	frappe.db.set_value("Raven Chatbot Chat", chat, "title", title, update_modified=False)
-	frappe.publish_realtime("chatbot_title", {"chat": chat}, user=frappe.session.user)
+	return title or " ".join(text.split())[:FALLBACK_LENGTH]

@@ -29,11 +29,6 @@ export const useChatbotStream = () => {
     useFrappeEventListener("chatbot_status", ({ chat, text }: { chat: string; text: string }) =>
         setStatuses((statuses) => ({ ...statuses, [chat]: text })))
 
-    useFrappeEventListener("chatbot_title", ({ chat }: { chat: string }) => {
-        mutate(chatKey(chat))
-        refresh()
-    })
-
     useFrappeEventListener("chatbot_done", async ({ chat, failed }: { chat: string; failed: boolean }) => {
         // Swap the streamed text for the saved message first, so the answer never blinks out.
         await Promise.all([mutate(chatKey(chat)), refresh()])
