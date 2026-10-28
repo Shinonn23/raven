@@ -382,7 +382,7 @@ class TestChatbotOrchestrator(TestChatbot):
 	def test_built_in_instruction_has_no_maintainer_comments_and_covers_the_rules(self):
 		text = default_instruction()
 		self.assertNotIn("<!--", text)
-		for rule in ("Never invent", "explicit", "permissions of the person", "do not yet have a company knowledge base", "same step", "manual assistant"):
+		for rule in ("Never invent", "approval card", "permissions of the person", "do not yet have a company knowledge base", "same step", "manual assistant"):
 			self.assertIn(rule, text)
 
 	def test_agent_offered_to_the_chatbot_needs_a_description(self):
