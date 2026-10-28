@@ -1,4 +1,4 @@
-"""What happens when the user approves a card: Create a document, or Update, Assign, Tag, Share, Attach to, Submit, Cancel or Delete the listed ones. Every step is
+"""What happens when the user approves a card: Create a document, or Update, Cancel and so on, the sidebar actions and their removals, or Delete the listed ones. Every step is
 checked against the user's own permissions again at that moment, whatever was checked when the AI asked."""
 
 import json
@@ -6,7 +6,7 @@ import json
 import frappe
 from frappe import _
 import frappe.share
-from frappe.desk.doctype.tag.tag import add_tag
+from frappe.desk.doctype.tag.tag import add_tag, remove_tag
 from frappe.desk.form import assign_to
 
 MAX_DOCUMENTS = 200
@@ -32,7 +32,9 @@ class ApprovedAction:
 			return self.create()
 		if len(self.names) > MAX_DOCUMENTS:
 			frappe.throw(_("At most {0} documents at a time.").format(MAX_DOCUMENTS))
-		change = {"Submit": self.submit, "Cancel": self.cancel, "Delete": self.delete, "Update": self.update, "Assign": self.assign, "Tag": self.tag, "Share": self.share, "Attach": self.attach}[self.action]
+		change = {"Submit": self.submit, "Cancel": self.cancel, "Delete": self.delete, "Update": self.update, "Assign": self.assign, "Tag": self.tag, "Share": self.share, "Attach": self.attach,
+			"Unassign": self.unassign, "Untag": self.untag, "Unshare": self.unshare, "Detach": self.detach,
+		}[self.action]
 		for name in self.names:
 			change(name)
 		return _("{0} {1} done.").format(len(self.names), self.doctype)
@@ -87,6 +89,29 @@ class ApprovedAction:
 				"attached_to_name": name,
 			}
 		).insert()
+
+	def unassign(self, name: str):
+		for user in self.values["assign_to"]:
+			assign_to.remove(self.doctype, name, user)
+
+	def untag(self, name: str):
+		self.document(name, "write")
+		for tag in self.values["tags"]:
+			remove_tag(tag, self.doctype, name)
+
+	def unshare(self, name: str):
+		self.document(name, "share")
+		for user in self.values["share_with"]:
+			frappe.share.remove(self.doctype, name, user)
+
+	def detach(self, name: str):
+		"""Remove attached files; each must really be attached to this document."""
+		self.document(name, "write")
+		for file_name in self.values["detach"]:
+			file = frappe.get_doc("File", file_name)
+			if (file.attached_to_doctype, file.attached_to_name) != (self.doctype, name):
+				frappe.throw(_("{0} is not attached to {1} {2}.").format(file_name, self.doctype, name))
+			frappe.delete_doc("File", file_name)
 
 	def update(self, name: str):
 		document = self.document(name, "write")

@@ -11,8 +11,8 @@ from raven.ai.harness.approved_actions import MAX_DOCUMENTS, editable
 from raven.ai.harness.data_tools import answer
 from raven.ai.harness.document_drafts import DocumentDraft
 
-SIDEBAR_ACTIONS = ("Assign", "Tag", "Share", "Attach")
-PERMISSION_FOR = {"Create": "create", "Update": "write", "Assign": "read", "Tag": "write", "Share": "share", "Attach": "write", "Submit": "submit", "Cancel": "cancel", "Delete": "delete"}
+SIDEBAR_ACTIONS = ("Assign", "Unassign", "Tag", "Untag", "Share", "Unshare", "Attach", "Detach")
+PERMISSION_FOR = {"Create": "create", "Update": "write", "Assign": "read", "Unassign": "read", "Tag": "write", "Untag": "write", "Share": "share", "Unshare": "share", "Attach": "write", "Detach": "write", "Submit": "submit", "Cancel": "cancel", "Delete": "delete"}
 WAITING = {
 	"state": "awaiting the user's approval",
 	"shown_to_user": "an approval card is in the chat",
@@ -39,6 +39,8 @@ def summarize_sidebar_action(values: dict) -> str:
 		return _("Tags: {0}").format(", ".join(values["tags"]))
 	if "share_with" in values:
 		return _("Share with: {0}").format(people(values["share_with"])) + (_(" (can edit)") if values.get("can_edit") else "")
+	if "detach" in values:
+		return _("Remove attachment: {0}").format(", ".join(frappe.db.get_value("File", file, "file_name") or file for file in values["detach"]))
 	if "file_url" in values:
 		return _("Attach: {0}").format(frappe.db.get_value("File", {"file_url": values["file_url"]}, "file_name") or values["file_url"])
 	return ""
@@ -81,6 +83,9 @@ def request_approval(chat: str | None, action: str, doctype: str, names: list[st
 	else:
 		if (people := (values or {}).get("assign_to") or (values or {}).get("share_with")) and (unknown := unusable_users(people)):
 			return {"not_requested": True, "problems": [f"Not an enabled user: {', '.join(unknown)}. Use the user id (email) from the User list."]}
+		if action == "Detach":
+			for file in (values or {}).get("detach") or []:
+				frappe.get_doc("File", file).check_permission("read")
 		if action == "Attach":
 			frappe.get_doc("File", {"file_url": (values or {}).get("file_url")}).check_permission("read")
 		if not names or len(names) > MAX_DOCUMENTS:
@@ -173,6 +178,26 @@ def document_tools(chat: str | None) -> list[FunctionTool]:
 	def attach_file(doctype: str, name: str, file_url: str) -> str:
 		return answer(lambda: request_approval(chat, "Attach", doctype, [name], {"file_url": file_url}))
 
+	@function_tool(strict_mode=False, name_override="unassign_documents", description_override="Remove people from the assignees of documents. `users` are user ids (emails).")
+	def unassign_documents(doctype: str, names: list[str], users: list[str]) -> str:
+		return answer(lambda: request_approval(chat, "Unassign", doctype, names, {"assign_to": users}))
+
+	@function_tool(strict_mode=False, name_override="untag_documents", description_override="Remove tags from documents.")
+	def untag_documents(doctype: str, names: list[str], tags: list[str]) -> str:
+		return answer(lambda: request_approval(chat, "Untag", doctype, names, {"tags": tags}))
+
+	@function_tool(strict_mode=False, name_override="unshare_documents", description_override="Stop sharing documents with users. `users` are user ids (emails).")
+	def unshare_documents(doctype: str, names: list[str], users: list[str]) -> str:
+		return answer(lambda: request_approval(chat, "Unshare", doctype, names, {"share_with": users}))
+
+	@function_tool(
+		strict_mode=False,
+		name_override="detach_files",
+		description_override="Remove attached files from a document. `files` are File ids; find them with list_documents on File filtered by attached_to_doctype and attached_to_name.",
+	)
+	def detach_files(doctype: str, name: str, files: list[str]) -> str:
+		return answer(lambda: request_approval(chat, "Detach", doctype, [name], {"detach": files}))
+
 	@function_tool(strict_mode=False, name_override="submit_document", description_override="Submit a draft document.")
 	def submit_document(doctype: str, name: str) -> str:
 		return answer(lambda: request_approval(chat, "Submit", doctype, [name]))
@@ -185,4 +210,4 @@ def document_tools(chat: str | None) -> list[FunctionTool]:
 	def delete_documents(doctype: str, names: list[str]) -> str:
 		return answer(lambda: request_approval(chat, "Delete", doctype, names))
 
-	return [preview_document, open_prefilled_form, create_document, update_documents, assign_documents, tag_documents, share_documents, attach_file, submit_document, cancel_document, delete_documents]
+	return [preview_document, open_prefilled_form, create_document, update_documents, assign_documents, tag_documents, share_documents, attach_file, unassign_documents, untag_documents, unshare_documents, detach_files, submit_document, cancel_document, delete_documents]

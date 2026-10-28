@@ -313,6 +313,38 @@ class TestHeldByTheHarness(IntegrationTestCase):
 		self.approve_last_card()
 		self.assertTrue(frappe.db.exists("File", {"attached_to_doctype": "ToDo", "attached_to_name": self.todo.name, "file_name": "plan.txt"}))
 
+	def test_every_sidebar_action_can_be_undone_after_approval(self):
+		other = frappe.get_doc({"doctype": "User", "email": "undo.target@example.com", "first_name": "Undo", "send_welcome_email": 0}).insert()
+		file = frappe.get_doc({"doctype": "File", "file_name": "gone.txt", "content": "x", "is_private": 1, "attached_to_doctype": "ToDo", "attached_to_name": self.todo.name}).insert()
+		ToDo = self.todo.name
+		for tool, arguments in (
+			("assign_documents", {"users": [other.name]}),
+			("tag_documents", {"tags": ["t1"]}),
+			("share_documents", {"users": [other.name]}),
+		):
+			self.call(tool, doctype="ToDo", names=[ToDo], **arguments)
+			self.approve_last_card()
+		for tool, arguments in (
+			("unassign_documents", {"names": [ToDo], "users": [other.name]}),
+			("untag_documents", {"names": [ToDo], "tags": ["t1"]}),
+			("unshare_documents", {"names": [ToDo], "users": [other.name]}),
+			("detach_files", {"name": ToDo, "files": [file.name]}),
+		):
+			self.call(tool, doctype="ToDo", **arguments)
+			self.assertEqual(frappe.get_last_doc("Raven AI Pending Action").status, "Pending")
+			self.approve_last_card()
+		self.assertFalse(frappe.db.exists("ToDo", {"reference_type": "ToDo", "reference_name": ToDo, "allocated_to": other.name, "status": "Open"}))
+		self.assertFalse(frappe.db.get_value("ToDo", ToDo, "_user_tags"))
+		self.assertFalse(frappe.db.exists("DocShare", {"user": other.name, "share_name": ToDo}))
+		self.assertFalse(frappe.db.exists("File", file.name))
+
+	def test_a_file_that_is_not_attached_to_the_document_cannot_be_detached(self):
+		elsewhere = frappe.get_doc({"doctype": "File", "file_name": "other.txt", "content": "x", "is_private": 1}).insert()
+		self.call("detach_files", doctype="ToDo", name=self.todo.name, files=[elsewhere.name])
+		card = self.approve_last_card()
+		self.assertEqual(card.status, "Failed")
+		self.assertTrue(frappe.db.exists("File", elsewhere.name))
+
 	def test_assigning_to_an_unknown_user_goes_back_to_the_ai(self):
 		result = json.loads(self.call("assign_documents", doctype="ToDo", names=[self.todo.name], users=["nobody@example.com"]))
 		self.assertIn("nobody@example.com", result["problems"][0])

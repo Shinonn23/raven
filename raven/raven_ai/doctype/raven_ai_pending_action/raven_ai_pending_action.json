@@ -41,7 +41,7 @@
    "fieldname": "action",
    "fieldtype": "Select",
    "label": "Action",
-   "options": "Create\nUpdate\nAssign\nTag\nShare\nAttach\nSubmit\nCancel\nDelete",
+   "options": "Create\nUpdate\nAssign\nUnassign\nTag\nUntag\nShare\nUnshare\nAttach\nDetach\nSubmit\nCancel\nDelete",
    "in_list_view": 1,
    "reqd": 1,
    "read_only": 1
