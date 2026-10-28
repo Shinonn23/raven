@@ -237,7 +237,7 @@ class TestHeldByTheHarness(IntegrationTestCase):
 			("delete_documents", {"doctype": "ToDo", "names": [self.todo.name]}),
 			("update_documents", {"doctype": "ToDo", "names": [self.todo.name], "values": {"priority": "High"}}),
 		):
-			self.assertFalse(json.loads(self.call(name, **arguments))["done"])
+			self.assertIn("approval", json.loads(self.call(name, **arguments))["state"])
 		self.assertEqual(frappe.db.get_value("ToDo", self.todo.name, "priority"), "Medium")
 		cards = get_chat(self.chat.name)["actions"]
 		self.assertEqual([(card["action"], card["summary"]) for card in cards], [("Delete", ""), ("Update", "Priority: High")])
@@ -252,7 +252,7 @@ class TestHeldByTheHarness(IntegrationTestCase):
 
 	def test_create_checks_first_and_only_makes_a_card(self):
 		before = frappe.db.count("ToDo")
-		self.assertFalse(json.loads(self.call("create_document", doctype="ToDo", values={"description": "New one"}))["done"])
+		self.assertIn("approval", json.loads(self.call("create_document", doctype="ToDo", values={"description": "New one"}))["state"])
 		self.assertEqual(frappe.db.count("ToDo"), before)
 		self.assertEqual([card["action"] for card in get_chat(self.chat.name)["actions"]], ["Create"])
 

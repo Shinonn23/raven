@@ -13,9 +13,12 @@ from raven.ai.harness.document_drafts import DocumentDraft
 
 PERMISSION_FOR = {"Create": "create", "Update": "write", "Submit": "submit", "Cancel": "cancel", "Delete": "delete"}
 WAITING = {
-	"done": False,
-	"status": "waiting for the user's decision",
-	"next": "Nothing more can be done until they decide. Do not ask again.",
+	"state": "awaiting the user's approval",
+	"shown_to_user": "an approval card is in the chat",
+	"next": (
+		"Say in one short sentence that the request is ready and they only need to approve it in the card. "
+		"It is not a failure and nothing is blocked, so do not say it could not be done or is not done yet. You will not be told when they decide, so promise no follow-up. Do not ask again."
+	),
 }
 
 
@@ -43,7 +46,7 @@ def request_approval(chat: str | None, action: str, doctype: str, names: list[st
 		frappe.has_permission(doctype, "create", throw=True)
 		checked = DocumentDraft().preview(doctype, values or {})
 		if not checked["ok"]:
-			return {"done": False, "problems": checked["problems"]}
+			return {"not_requested": True, "problems": checked["problems"]}
 	else:
 		if not names or len(names) > MAX_DOCUMENTS:
 			frappe.throw(f"Give between 1 and {MAX_DOCUMENTS} documents.")
