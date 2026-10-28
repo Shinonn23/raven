@@ -1,4 +1,8 @@
-export type AskedQuestion = { question: string; options: string[]; multiple?: boolean }
+export type AskedOption = { label: string; description?: string; preview?: string }
+export type AskedQuestion = { question: string; options: AskedOption[]; multiple?: boolean }
+
+/** The choices are laid out as a list with a preview beside it when any of them has a preview or a description. */
+export const hasDetails = (question: AskedQuestion): boolean => question.options.some((option) => option.preview || option.description)
 
 /** What the user has picked or typed for each question so far. */
 export type Draft = { picked: string[]; typed: string }

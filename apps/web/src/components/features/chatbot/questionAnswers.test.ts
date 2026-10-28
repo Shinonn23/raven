@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { allAnswers, answerOf, emptyDraft, isComplete, togglePick, type } from "./questionAnswers"
+import { allAnswers, answerOf, emptyDraft, hasDetails, isComplete, togglePick, type } from "./questionAnswers"
 
 describe("questionAnswers", () => {
     it("keeps one pick for a single-choice question, and picking it again drops it", () => {
@@ -21,10 +21,16 @@ describe("questionAnswers", () => {
     })
 
     it("is complete only when every question has an answer", () => {
-        const questions = [{ question: "One?", options: ["A"] }, { question: "Two?", options: [] }]
+        const questions = [{ question: "One?", options: [{ label: "A" }] }, { question: "Two?", options: [] }]
         expect(isComplete(questions, [togglePick(emptyDraft, "A", false)])).toBe(false)
         const drafts = [togglePick(emptyDraft, "A", false), type(emptyDraft, "text", false)]
         expect(isComplete(questions, drafts)).toBe(true)
         expect(allAnswers(questions, drafts)).toEqual(["A", "text"])
+    })
+
+    it("shows a preview layout only for questions whose choices have details", () => {
+        expect(hasDetails({ question: "?", options: [{ label: "A" }] })).toBe(false)
+        expect(hasDetails({ question: "?", options: [{ label: "A" }, { label: "B", preview: "**B**" }] })).toBe(true)
+        expect(hasDetails({ question: "?", options: [{ label: "A", description: "first" }] })).toBe(true)
     })
 })

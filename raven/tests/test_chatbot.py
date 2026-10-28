@@ -324,7 +324,7 @@ class TestChatbotQuestions(TestChatbot):
 
 	__test__ = True
 	QUESTIONS = [
-		{"question": "Which field?", "options": ["Assigned To", "Owner"]},
+		{"question": "Which field?", "options": ["Assigned To", {"label": "Owner", "description": "Who created it", "preview": "**Owner**: set to you"}]},
 		{"question": "Which tags?", "options": ["a", "b"], "multiple": True},
 	]
 
@@ -339,15 +339,24 @@ class TestChatbotQuestions(TestChatbot):
 		card = self.asked(chat)
 		self.assertEqual(len(card), 1)
 		self.assertEqual(card[0]["message_position"], 2)
-		self.assertEqual([(q["question"], q["options"], q["multiple"]) for q in json.loads(card[0]["questions"])], [("Which field?", ["Assigned To", "Owner"], False), ("Which tags?", ["a", "b"], True)])
+		self.assertEqual([(q["question"], q["options"], q["multiple"]) for q in json.loads(card[0]["questions"])], [
+			("Which field?", [{"label": "Assigned To"}, {"label": "Owner", "description": "Who created it", "preview": "**Owner**: set to you"}], False),
+			("Which tags?", [{"label": "a"}, {"label": "b"}], True),
+		])
 
 	def test_questions_and_choices_are_limited_and_trimmed(self):
 		with bot_answers():
 			chat = send_message("x")["name"]
-		many = [{"question": f" Q{n} ", "options": [" A ", "", "B", "C", "D", "E", "F", "G"]} for n in range(6)] + [{"question": "  "}]
+		many = [{"question": f" Q{n} ", "options": [" A ", "", {"label": " "}, "B", "C", "D", "E", "F", "G"]} for n in range(6)] + [{"question": "  "}]
 		stored = json.loads(self.asked(chat, many)[0]["questions"])
 		self.assertEqual(len(stored), 4)
-		self.assertEqual((stored[0]["question"], stored[0]["options"]), ("Q0", ["A", "B", "C", "D", "E", "F"]))
+		self.assertEqual((stored[0]["question"], [option["label"] for option in stored[0]["options"]]), ("Q0", ["A", "B", "C", "D", "E", "F"]))
+
+	def test_a_long_preview_is_cut(self):
+		with bot_answers():
+			chat = send_message("x")["name"]
+		stored = json.loads(self.asked(chat, [{"question": "Q", "options": [{"label": "A", "preview": "x" * 5000, "description": "d" * 500}]}])[0]["questions"])
+		self.assertEqual((len(stored[0]["options"][0]["preview"]), len(stored[0]["options"][0]["description"])), (2000, 200))
 
 	def test_asking_nothing_is_refused(self):
 		with bot_answers():
