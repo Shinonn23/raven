@@ -71,3 +71,10 @@ class ActionLogHooks(RunHooks):
 	def flush(self):
 		RavenAIActionLog.record_all(self.rows)
 		self.rows = []
+
+	def save_log(self):
+		"""Flush, but a log that cannot be saved must never take the answer down with it."""
+		try:
+			self.flush()
+		except Exception:
+			frappe.log_error(title="Raven AI Action Log could not be saved")

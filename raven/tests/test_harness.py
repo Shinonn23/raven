@@ -92,6 +92,11 @@ class TestActionLog(IntegrationTestCase):
 		await hooks.on_tool_start(context, agent, tool)
 		await hooks.on_tool_end(context, agent, tool, '{"error": "boom"}')
 
+	def test_a_log_that_cannot_be_saved_does_not_raise(self):
+		hooks = ActionLogHooks("No such chat", None)
+		self.run_hooks(hooks)
+		hooks.save_log()
+
 	def test_model_and_tool_calls_are_saved_with_their_numbers(self):
 		hooks = ActionLogHooks(self.chat.name, "high")
 		self.run_hooks(hooks)

@@ -9,6 +9,7 @@ from frappe.tests import IntegrationTestCase
 
 from raven.ai import chatbot_stream
 from raven.ai.chatbot_models import ChatbotChoice, resolve_choice
+from raven.ai.chatbot_context import file_context, image_inputs
 from raven.ai.manual_sources import ManualSource, configured_sources
 from raven.ai.manual_tools import (
 	MAX_RESPONSE_BYTES,
@@ -246,6 +247,48 @@ class TestChatbotAttachmentsAndSkills(TestChatbot):
 		self.assertNotIn(private.file_url, [file.file_url for file in get_attachable_files()])
 		frappe.set_user(OWNER)
 		self.assertIn(private.file_url, [file.file_url for file in get_attachable_files("mine")])
+
+
+PNG = bytes.fromhex("89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360000002000001e221bc330000000049454e44ae426082")
+
+
+class TestChatbotPictures(TestChatbot):
+	"""A picture the user attaches or pastes reaches the model as an image, not just a name."""
+
+	__test__ = True
+
+	def picture(self, name="shot.png", content=PNG):
+		return frappe.get_doc({"doctype": "File", "file_name": name, "content": content, "is_private": 1}).insert()
+
+	def test_a_picture_becomes_model_input_and_its_note_says_it_can_be_seen(self):
+		file = self.picture()
+		images = image_inputs([{"file_url": file.file_url}])
+		self.assertEqual((images[0]["type"], images[0]["image_url"][:22]), ("input_image", "data:image/png;base64,"))
+		self.assertIn("you can see it", file_context(file.file_url))
+
+	def test_other_files_and_oversized_pictures_are_not_sent_as_images(self):
+		note = frappe.get_doc({"doctype": "File", "file_name": "n.txt", "content": "x", "is_private": 1}).insert()
+		self.assertEqual(image_inputs([{"file_url": note.file_url}]), [])
+		with patch("raven.ai.chatbot_context.MAX_IMAGE_BYTES", 10):
+			self.assertEqual(image_inputs([{"file_url": self.picture().file_url}]), [])
+
+	def test_a_stranger_cannot_make_the_model_see_someone_elses_picture(self):
+		file = self.picture()
+		frappe.set_user(STRANGER)
+		with self.assertRaises(frappe.PermissionError):
+			image_inputs([{"file_url": file.file_url}])
+
+	def test_the_question_carries_the_pictures(self):
+		picture = {"type": "input_image", "image_url": "data:image/png;base64,AAAA"}
+		items = chatbot_stream._input_items("what is this?", [{"role": "user", "content": "hi"}], [picture])
+		self.assertEqual(items[-1]["content"], [{"type": "input_text", "text": "what is this?"}, picture])
+		self.assertEqual(chatbot_stream._input_items("plain", [])[-1]["content"], "plain")
+
+	def test_sending_a_picture_gives_it_to_the_reply(self):
+		file = self.picture()
+		with bot_answers() as ask_agent:
+			send_message("look", files=[{"file_url": file.file_url, "file_name": file.file_name}])
+		self.assertEqual(ask_agent.call_args_list[0].args[4][0]["type"], "input_image")
 
 
 class TestChatbotSharing(TestChatbot):

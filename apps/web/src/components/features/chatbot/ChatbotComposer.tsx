@@ -1,4 +1,4 @@
-import { useRef, useState, type KeyboardEvent } from "react"
+import { useRef, useState, type ClipboardEvent, type KeyboardEvent } from "react"
 import { useAtom } from "jotai"
 import { BoldIcon, CodeIcon, ItalicIcon, ListIcon, QuoteIcon, SendHorizontalIcon, TypeIcon } from "lucide-react"
 import AttachFrappeDocumentDialog, { LinkedDocumentBanner } from "@components/features/ChatInput/AttachFrappeDocumentDialog"
@@ -13,6 +13,7 @@ import { ChatbotAttachmentCard } from "./ChatbotAttachmentCard"
 import { ChatbotModelPicker } from "./ChatbotModelPicker"
 import { useChatbotChoice } from "./useChatbotChoice"
 import { ChatbotSlashMenu } from "./ChatbotSlashMenu"
+import { pastedFiles } from "./pastedFiles"
 import { applyMarkdownFormat, matchingSkills, slashQuery, type MarkdownFormat } from "./markdownFormatting"
 import { useChatbotSkills, useRecommendedDocuments } from "./useChatbotComposerData"
 import type { ChatbotOutgoingMessage, ChatbotSkill } from "./types"
@@ -71,6 +72,13 @@ export const ChatbotComposer = ({ onSend, disabled, draftKey }: ChatbotComposerP
         requestAnimationFrame(() => { field.focus(); field.setSelectionRange(edit.selectionStart, edit.selectionEnd) })
     }
 
+    const onPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+        const pasted = pastedFiles(event.clipboardData)
+        if (pasted.length === 0) return
+        event.preventDefault()
+        addUploads(pasted)
+    }
+
     const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
         if (event.nativeEvent.isComposing) return
         if (query !== null && slashMatches.length > 0) {
@@ -115,6 +123,7 @@ export const ChatbotComposer = ({ onSend, disabled, draftKey }: ChatbotComposerP
                     value={text}
                     onChange={(event) => { setText(event.target.value); setSlashIndex(0) }}
                     onKeyDown={onKeyDown}
+                    onPaste={onPaste}
                     placeholder={_("Type a message...")}
                     aria-label={_("Message")}
                     className="block max-h-64 min-h-14 w-full resize-none bg-transparent px-3 py-2 text-p-base text-ink-gray-8 outline-none field-sizing-content placeholder:text-ink-gray-4 md:min-h-16"

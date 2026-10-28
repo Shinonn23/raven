@@ -214,8 +214,10 @@ def build_orchestrator(
 	return agent, names
 
 
-def _input_items(prompt: str, history: list[dict]) -> list[dict]:
-	return [*({"role": item["role"], "content": item["content"]} for item in history if item["content"]), {"role": "user", "content": prompt}]
+def _input_items(prompt: str, history: list[dict], images: list[dict] | None = None) -> list[dict]:
+	"""The conversation so far and the new question; with pictures, the question carries them."""
+	question = [{"type": "input_text", "text": prompt}, *images] if images else prompt
+	return [*({"role": item["role"], "content": item["content"]} for item in history if item["content"]), {"role": "user", "content": question}]
 
 
 def _status_for(event, specialists: dict[str, str]) -> str | None:
@@ -226,10 +228,10 @@ def _status_for(event, specialists: dict[str, str]) -> str | None:
 	return _("Asking {0}…").format(specialists[name]) if name in specialists else None
 
 
-async def _run_streamed(prompt: str, history: list[dict], publisher: DeltaPublisher, choice: ChatbotChoice) -> str:
+async def _run_streamed(prompt: str, history: list[dict], publisher: DeltaPublisher, choice: ChatbotChoice, images: list[dict] | None) -> str:
 	hooks = ActionLogHooks(publisher.chat, choice.effort)
 	agent, specialists = build_orchestrator(choice, publisher, hooks)
-	result = Runner.run_streamed(agent, _input_items(prompt, history), max_turns=MAX_TURNS, hooks=hooks)
+	result = Runner.run_streamed(agent, _input_items(prompt, history, images), max_turns=MAX_TURNS, hooks=hooks)
 	try:
 		async for event in result.stream_events():
 			if event.type == "raw_response_event" and isinstance(event.data, ResponseTextDeltaEvent):
@@ -237,12 +239,14 @@ async def _run_streamed(prompt: str, history: list[dict], publisher: DeltaPublis
 			elif status := _status_for(event, specialists):
 				publisher.status(status)
 	finally:
-		hooks.flush()
+		hooks.save_log()
 	return result.final_output or ""
 
 
-def stream_reply(prompt: str, history: list[dict], publisher: DeltaPublisher, choice: ChatbotChoice) -> str:
+def stream_reply(
+	prompt: str, history: list[dict], publisher: DeltaPublisher, choice: ChatbotChoice, images: list[dict] | None = None
+) -> str:
 	"""Run the orchestrator, publishing its text as it is written; returns the whole answer."""
-	answer = asyncio.run(_run_streamed(prompt, history, publisher, choice))
+	answer = asyncio.run(_run_streamed(prompt, history, publisher, choice, images))
 	publisher.flush()
 	return answer

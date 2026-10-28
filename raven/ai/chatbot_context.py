@@ -1,9 +1,13 @@
+import base64
 import json
+from pathlib import Path
 
 import frappe
 from frappe import _
 
 READABLE_EXTENSIONS = {"txt", "md", "csv", "json"}
+IMAGE_TYPES = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "webp": "image/webp", "gif": "image/gif"}
+MAX_IMAGE_BYTES = 5_000_000
 MAX_CONTEXT_CHARACTERS = 8000
 
 
@@ -18,11 +22,31 @@ def document_context(doctype: str, docname: str) -> str:
 	return _clip(f"Document {doctype} {docname}:\n{json.dumps(doc.as_dict(), default=str, indent=1)}")
 
 
+def extension_of(file_name: str | None) -> str:
+	return (file_name or "").rsplit(".", 1)[-1].lower()
+
+
+def image_inputs(files: list[dict]) -> list[dict]:
+	"""The attached pictures as model input, so the model can see them. Raises if the user may not read one; skips very large ones."""
+	images = []
+	for attached in files:
+		file = frappe.get_doc("File", {"file_url": attached["file_url"]})
+		file.check_permission("read")
+		kind = IMAGE_TYPES.get(extension_of(file.file_name))
+		content = Path(file.get_full_path()).read_bytes() if kind else b""
+		if kind and 0 < len(content) <= MAX_IMAGE_BYTES:
+			encoded = base64.b64encode(content).decode()
+			images.append({"type": "input_image", "image_url": f"data:{kind};base64,{encoded}", "detail": "auto"})
+	return images
+
+
 def file_context(file_url: str) -> str:
 	"""A file's name, plus its content when it is plain text. Raises if the user may not read it."""
 	file = frappe.get_doc("File", {"file_url": file_url})
 	file.check_permission("read")
-	extension = (file.file_name or "").rsplit(".", 1)[-1].lower()
+	extension = extension_of(file.file_name)
+	if extension in IMAGE_TYPES:
+		return f"Attached image: {file.file_name} (you can see it)"
 	if extension not in READABLE_EXTENSIONS:
 		return f"Attached file: {file.file_name} (content not readable as text)"
 	content = file.get_content()

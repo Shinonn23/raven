@@ -3,7 +3,7 @@ from agents.exceptions import MaxTurnsExceeded
 from frappe import _
 from frappe.model.document import Document
 
-from raven.ai.chatbot_context import build_prompt, validate_attachments
+from raven.ai.chatbot_context import build_prompt, image_inputs, validate_attachments
 from raven.ai.chatbot_models import ChatbotChoice, resolve_choice
 from raven.ai.chatbot_stream import DeltaPublisher, stream_reply
 from raven.raven_ai.doctype.raven_chatbot_document_usage.raven_chatbot_document_usage import (
@@ -58,6 +58,7 @@ class RavenChatbotChat(Document):
 			enqueue_after_commit=True,
 			chat=self.name,
 			prompt=prompt,
+			files=files,
 			history=history,
 			model=choice.model,
 			effort=choice.effort,
@@ -66,12 +67,12 @@ class RavenChatbotChat(Document):
 			RavenChatbotDocumentUsage.record(document["doctype"], document["docname"])
 
 
-def reply(chat: str, prompt: str, history: list[dict], model: str, effort: str | None = None):
+def reply(chat: str, prompt: str, history: list[dict], model: str, effort: str | None = None, files: list[dict] | None = None):
 	"""Background job: stream the bot's answer to the user's browser, then save it as the assistant message."""
 	doc = frappe.get_doc("Raven Chatbot Chat", chat)
 	failed = False
 	try:
-		answer = stream_reply(prompt, history, DeltaPublisher(chat), ChatbotChoice(model, effort))
+		answer = stream_reply(prompt, history, DeltaPublisher(chat), ChatbotChoice(model, effort), image_inputs(files or []))
 	except MaxTurnsExceeded:
 		answer = _("This took more steps than I am allowed to take in one go. Please ask for a smaller part of it and I will continue.")
 		failed = True
