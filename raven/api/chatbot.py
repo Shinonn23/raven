@@ -3,6 +3,7 @@ import frappe.share
 from frappe import _
 
 from raven.ai.chatbot_models import allowed_models
+from raven.ai.manual_sources import manual_origins
 
 RECOMMENDATION_LIMIT = 5
 
@@ -150,5 +151,6 @@ def unshare_chat(chat: str, user: str) -> list[dict]:
 
 @frappe.whitelist(methods=["GET"])
 def get_chatbot_options() -> dict:
-	"""The models (and efforts per model) an admin lets users pick; the first model is the default."""
-	return {"models": allowed_models()}
+	"""The models (and efforts per model) an admin lets users pick (the first is the default), and the manual sites whose pictures
+	the chat may show."""
+	return {"models": allowed_models(), "manual_origins": manual_origins()}

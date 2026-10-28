@@ -61,6 +61,7 @@ class TestChatbot(IntegrationTestCase):
 			self.make_raven_user(email)
 		frappe.db.set_single_value("Raven Settings", "enable_ai_integration", 1)
 		self.allow_models(("test-model", "low,medium,high"), ("plain-model", ""))
+		self.no_manual_sources()
 		self.bot = frappe.get_doc(
 			{
 				"doctype": "Raven Bot",
@@ -78,6 +79,15 @@ class TestChatbot(IntegrationTestCase):
 		"""The admin's list of models users may pick; the first row is the default."""
 		settings = frappe.get_doc("Raven Settings")
 		settings.set("chatbot_models", [{"model": model, "efforts": efforts} for model, efforts in rows])
+		settings.flags.ignore_permissions = True
+		settings.save()
+		frappe.clear_document_cache("Raven Settings", "Raven Settings")
+
+	@staticmethod
+	def no_manual_sources():
+		"""The tests start from a site with no manual source, whatever the real site has set (the rollback restores it)."""
+		settings = frappe.get_doc("Raven Settings")
+		settings.set("manual_sources", [])
 		settings.flags.ignore_permissions = True
 		settings.save()
 		frappe.clear_document_cache("Raven Settings", "Raven Settings")
@@ -649,6 +659,32 @@ class TestManualSources(TestChatbot):
 		settings.save()
 		frappe.clear_document_cache("Raven Settings", "Raven Settings")
 		self.assertEqual(configured_sources()[0].api_secret, "the-real-secret")
+
+
+class TestManualPictures(TestManualSources):
+	__test__ = True
+
+	def test_the_chat_may_load_pictures_only_from_the_manual_sites(self):
+		self.save_sources(
+			("manual", "https://manual.example/", "s1"),
+			("uat", "https://uat.manual.example/some/path", "s2"),
+			("again", "https://manual.example", "s3"),
+		)
+		frappe.set_user(OWNER)
+		self.assertEqual(
+			get_chatbot_options()["manual_origins"], ["https://manual.example", "https://uat.manual.example"]
+		)
+
+	def test_no_manual_source_means_no_picture_host(self):
+		self.save_sources()
+		frappe.set_user(OWNER)
+		self.assertEqual(get_chatbot_options()["manual_origins"], [])
+
+	def test_the_instructions_tell_it_how_to_choose_and_keep_pictures(self):
+		text = manual_instruction()
+		for phrase in ("# Pictures", "![text](address)", "Never write or change an address", "At most 4", "กรอบ 9–10"):
+			self.assertIn(phrase, text)
+		self.assertIn("keep them exactly as given", chatbot_stream.default_instruction())
 
 
 class TestManualAssistant(TestChatbotOrchestrator):

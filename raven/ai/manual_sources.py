@@ -39,3 +39,14 @@ def configured_sources() -> list[ManualSource]:
 	]
 
 
+
+
+def manual_origins() -> list[str]:
+	"""scheme://host of every configured manual site: the only places the chat loads pictures from."""
+	origins = []
+	for row in frappe.get_cached_doc("Raven Settings").manual_sources:
+		url = urlsplit((row.base_url or "").strip())
+		origin = f"{url.scheme}://{url.netloc}"
+		if url.netloc and origin not in origins:
+			origins.append(origin)
+	return origins

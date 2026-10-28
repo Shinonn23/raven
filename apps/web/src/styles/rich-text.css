@@ -501,3 +501,29 @@
 [data-raven-editor] .tiptap.resize-cursor {
   cursor: col-resize;
 }
+
+/* The chatbot's answers are Markdown, which separates paragraphs with a blank line (a message separates them with Enter, and
+   paragraphs carry no margin there). Give paragraphs, lists, headings and tables room, and make headings read as headings. */
+.chatbot-markdown > * + * {
+  @apply mt-3;
+}
+
+.chatbot-markdown :is(h1, h2, h3, h4) {
+  @apply mt-4 mb-1 font-semibold;
+}
+
+.chatbot-markdown :is(ul, ol) {
+  @apply my-2;
+}
+
+.chatbot-markdown li + li {
+  @apply mt-1;
+}
+
+.chatbot-markdown p {
+  @apply leading-relaxed;
+}
+
+.chatbot-markdown .tableWrapper {
+  @apply my-3;
+}

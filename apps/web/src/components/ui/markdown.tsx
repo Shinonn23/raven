@@ -2,7 +2,11 @@ import React, { Suspense, lazy } from 'react'
 
 interface MarkdownRendererProps {
     content: string,
-    className?: string
+    className?: string,
+    /** Show raw HTML in the content (default). Off for text a model wrote, which must not inject elements. */
+    allowHtml?: boolean,
+    /** When set, pictures load only from these origins (see markdown-images.ts). Unset: pictures load from anywhere. */
+    imageOrigins?: string[]
 }
 
 /**
@@ -21,10 +25,10 @@ const MarkdownImpl = lazy(() => import('./markdown-impl'))
 
 const stripHtmlTags = (text: string) => text.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
 
-const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className }) => {
+const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className, allowHtml, imageOrigins }) => {
     return (
         <Suspense fallback={<span className={className}>{stripHtmlTags(content)}</span>}>
-            <MarkdownImpl content={content} className={className} />
+            <MarkdownImpl content={content} className={className} allowHtml={allowHtml} imageOrigins={imageOrigins} />
         </Suspense>
     )
 }
