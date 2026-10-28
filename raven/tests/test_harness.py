@@ -239,10 +239,10 @@ class TestHeldByTheHarness(IntegrationTestCase):
 		self.chat = frappe.get_doc({"doctype": "Raven Chatbot Chat", "title": "Held"}).insert()
 		self.todo = frappe.get_doc({"doctype": "ToDo", "description": "Keep me"}).insert()
 
-	def call(self, name, **arguments):
-		tool = next(tool for tool in document_tools(self.chat.name) if tool.name == name)
+	def call(self, tool_name, /, **arguments):
+		tool = next(tool for tool in document_tools(self.chat.name) if tool.name == tool_name)
 		text = json.dumps(arguments)
-		return asyncio.run(tool.on_invoke_tool(ToolContext(context=None, tool_name=name, tool_call_id="call", tool_arguments=text), text))
+		return asyncio.run(tool.on_invoke_tool(ToolContext(context=None, tool_name=tool_name, tool_call_id="call", tool_arguments=text), text))
 
 	def test_delete_and_update_only_make_cards(self):
 		for name, arguments in (
@@ -273,6 +273,50 @@ class TestHeldByTheHarness(IntegrationTestCase):
 			self.call("create_document", doctype="ToDo", values={"description": "Once"})
 		self.call("create_document", doctype="ToDo", values={"description": "Different"})
 		self.assertEqual(len(get_chat(self.chat.name)["actions"]), 2)
+
+	def test_assigning_to_two_people_is_held_and_then_done_with_frappes_assign(self):
+		second = frappe.get_doc({"doctype": "User", "email": "second.assignee@example.com", "first_name": "Second", "send_welcome_email": 0}).insert()
+		users = ["Administrator", second.name]
+		self.call("assign_documents", doctype="ToDo", names=[self.todo.name], users=users)
+		card = frappe.get_last_doc("Raven AI Pending Action")
+		self.assertEqual(frappe.db.count("ToDo", {"reference_type": "ToDo", "reference_name": self.todo.name}), 0)
+		self.assertIn(frappe.utils.get_fullname(second.name), card.summary)
+		card.decide(True)
+		assigned = frappe.get_all("ToDo", filters={"reference_type": "ToDo", "reference_name": self.todo.name}, pluck="allocated_to")
+		self.assertCountEqual(assigned, users)
+
+	def approve_last_card(self):
+		card = frappe.get_last_doc("Raven AI Pending Action")
+		card.decide(True)
+		return card
+
+	def test_tags_are_held_then_added(self):
+		self.call("tag_documents", doctype="ToDo", names=[self.todo.name], tags=["urgent", "meeting"])
+		self.assertEqual(frappe.get_last_doc("Raven AI Pending Action").summary, "Tags: urgent, meeting")
+		self.assertFalse(frappe.db.get_value("ToDo", self.todo.name, "_user_tags"))
+		self.approve_last_card()
+		self.assertCountEqual(filter(None, frappe.db.get_value("ToDo", self.todo.name, "_user_tags").split(",")), ["urgent", "meeting"])
+
+	def test_share_is_held_then_given_with_the_chosen_rights(self):
+		other = frappe.get_doc({"doctype": "User", "email": "share.target@example.com", "first_name": "Share", "send_welcome_email": 0}).insert()
+		self.call("share_documents", doctype="ToDo", names=[self.todo.name], users=[other.name], can_edit=True)
+		self.assertFalse(frappe.db.exists("DocShare", {"user": other.name, "share_name": self.todo.name}))
+		self.assertIn("(can edit)", frappe.get_last_doc("Raven AI Pending Action").summary)
+		self.approve_last_card()
+		self.assertEqual(frappe.db.get_value("DocShare", {"user": other.name, "share_name": self.todo.name}, ["read", "write"]), (1, 1))
+
+	def test_a_file_is_attached_only_after_approval_and_only_if_the_user_may_read_it(self):
+		file = frappe.get_doc({"doctype": "File", "file_name": "plan.txt", "content": "plan", "is_private": 1}).insert()
+		self.call("attach_file", doctype="ToDo", name=self.todo.name, file_url=file.file_url)
+		self.assertEqual(frappe.get_last_doc("Raven AI Pending Action").summary, "Attach: plan.txt")
+		self.assertFalse(frappe.db.exists("File", {"attached_to_doctype": "ToDo", "attached_to_name": self.todo.name}))
+		self.approve_last_card()
+		self.assertTrue(frappe.db.exists("File", {"attached_to_doctype": "ToDo", "attached_to_name": self.todo.name, "file_name": "plan.txt"}))
+
+	def test_assigning_to_an_unknown_user_goes_back_to_the_ai(self):
+		result = json.loads(self.call("assign_documents", doctype="ToDo", names=[self.todo.name], users=["nobody@example.com"]))
+		self.assertIn("nobody@example.com", result["problems"][0])
+		self.assertEqual(get_chat(self.chat.name)["actions"], [])
 
 	def test_an_invalid_new_document_gets_no_card_and_the_problem_goes_back_to_the_ai(self):
 		result = json.loads(self.call("create_document", doctype="ToDo", values={"description": "x", "reference_type": "No Such DocType", "reference_name": "y"}))

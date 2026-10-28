@@ -46,12 +46,12 @@ def file_context(file_url: str) -> str:
 	file.check_permission("read")
 	extension = extension_of(file.file_name)
 	if extension in IMAGE_TYPES:
-		return f"Attached image: {file.file_name} (you can see it)"
+		return f"Attached image: {file.file_name} (you can see it; file_url: {file.file_url})"
 	if extension not in READABLE_EXTENSIONS:
-		return f"Attached file: {file.file_name} (content not readable as text)"
+		return f"Attached file: {file.file_name} (content not readable as text; file_url: {file.file_url})"
 	content = file.get_content()
 	content = content.decode(errors="replace") if isinstance(content, bytes) else content
-	return _clip(f"Attached file {file.file_name}:\n{content}")
+	return _clip(f"Attached file {file.file_name} (file_url: {file.file_url}):\n{content}")
 
 
 ATTACHED_ONLY_REQUEST = (

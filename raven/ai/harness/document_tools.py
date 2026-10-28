@@ -11,7 +11,8 @@ from raven.ai.harness.approved_actions import MAX_DOCUMENTS, editable
 from raven.ai.harness.data_tools import answer
 from raven.ai.harness.document_drafts import DocumentDraft
 
-PERMISSION_FOR = {"Create": "create", "Update": "write", "Submit": "submit", "Cancel": "cancel", "Delete": "delete"}
+SIDEBAR_ACTIONS = ("Assign", "Tag", "Share", "Attach")
+PERMISSION_FOR = {"Create": "create", "Update": "write", "Assign": "read", "Tag": "write", "Share": "share", "Attach": "write", "Submit": "submit", "Cancel": "cancel", "Delete": "delete"}
 WAITING = {
 	"state": "awaiting the user's approval",
 	"shown_to_user": "an approval card is in the chat",
@@ -27,6 +28,20 @@ def display(field, value) -> str:
 	if field and field.fieldtype == "Link" and field.options == "User":
 		return frappe.utils.get_fullname(value)
 	return str(value)
+
+
+def summarize_sidebar_action(values: dict) -> str:
+	"""The card text of Assign, Tag, Share and Attach, which carry users, tags or a file rather than field values."""
+	people = lambda users: ", ".join(frappe.utils.get_fullname(user) for user in users)  # noqa: E731
+	if "assign_to" in values:
+		return _("Assign to: {0}").format(people(values["assign_to"]))
+	if "tags" in values:
+		return _("Tags: {0}").format(", ".join(values["tags"]))
+	if "share_with" in values:
+		return _("Share with: {0}").format(people(values["share_with"])) + (_(" (can edit)") if values.get("can_edit") else "")
+	if "file_url" in values:
+		return _("Attach: {0}").format(frappe.db.get_value("File", {"file_url": values["file_url"]}, "file_name") or values["file_url"])
+	return ""
 
 
 def summarize(doctype: str, values: dict | None) -> str:
@@ -48,6 +63,13 @@ def message_count(chat: str | None) -> int:
 	return len(document.messages)
 
 
+def unusable_users(users: list[str] | None) -> list[str]:
+	"""The users in the list that do not exist or are disabled."""
+	users = users or []
+	found = frappe.get_list("User", filters={"name": ["in", users], "enabled": 1}, pluck="name") if users else []
+	return [user for user in users or [""] if user not in found]
+
+
 def request_approval(chat: str | None, action: str, doctype: str, names: list[str] | None = None, values: dict | None = None) -> dict:
 	"""Hold the change for the user. It must be allowed for them now, and a new document must pass the checks of saving."""
 	names = names or []
@@ -57,6 +79,10 @@ def request_approval(chat: str | None, action: str, doctype: str, names: list[st
 		if not checked["ok"]:
 			return {"not_requested": True, "problems": checked["problems"]}
 	else:
+		if (people := (values or {}).get("assign_to") or (values or {}).get("share_with")) and (unknown := unusable_users(people)):
+			return {"not_requested": True, "problems": [f"Not an enabled user: {', '.join(unknown)}. Use the user id (email) from the User list."]}
+		if action == "Attach":
+			frappe.get_doc("File", {"file_url": (values or {}).get("file_url")}).check_permission("read")
 		if not names or len(names) > MAX_DOCUMENTS:
 			frappe.throw(f"Give between 1 and {MAX_DOCUMENTS} documents.")
 		for name in names:
@@ -71,7 +97,7 @@ def request_approval(chat: str | None, action: str, doctype: str, names: list[st
 	}
 	# Asking again for what is already waiting (the AI may retry when it sees "not done") must not make a second card.
 	if not frappe.db.exists("Raven AI Pending Action", {**request, "status": "Pending"}):
-		frappe.get_doc({"doctype": "Raven AI Pending Action", **request, "summary": summarize(doctype, values)}).insert()
+		frappe.get_doc({"doctype": "Raven AI Pending Action", **request, "summary": summarize_sidebar_action(values or {}) if action in SIDEBAR_ACTIONS else summarize(doctype, values)}).insert()
 	return WAITING
 
 
@@ -109,6 +135,44 @@ def document_tools(chat: str | None) -> list[FunctionTool]:
 	def update_documents(doctype: str, names: list[str], values: dict) -> str:
 		return answer(lambda: request_approval(chat, "Update", doctype, names, values))
 
+	@function_tool(
+		strict_mode=False,
+		name_override="assign_documents",
+		description_override=(
+			"Assign documents to one or more users with Frappe's Assign (each gets an assignment in their ToDo list). Use this, not a field, "
+			"when someone asks to assign a document to people. `users` are user ids (emails); find them with list_documents on User."
+		),
+	)
+	def assign_documents(doctype: str, names: list[str], users: list[str]) -> str:
+		return answer(lambda: request_approval(chat, "Assign", doctype, names, {"assign_to": users}))
+
+	@function_tool(
+		strict_mode=False,
+		name_override="tag_documents",
+		description_override="Add tags to documents, like the Tags box in the document sidebar.",
+	)
+	def tag_documents(doctype: str, names: list[str], tags: list[str]) -> str:
+		return answer(lambda: request_approval(chat, "Tag", doctype, names, {"tags": tags}))
+
+	@function_tool(
+		strict_mode=False,
+		name_override="share_documents",
+		description_override=(
+			"Share documents with users, like Share in the document sidebar: they can read, and edit if `can_edit`. "
+			"`users` are user ids (emails); find them with list_documents on User."
+		),
+	)
+	def share_documents(doctype: str, names: list[str], users: list[str], can_edit: bool = False) -> str:
+		return answer(lambda: request_approval(chat, "Share", doctype, names, {"share_with": users, "can_edit": can_edit}))
+
+	@function_tool(
+		strict_mode=False,
+		name_override="attach_file",
+		description_override="Attach a file to a document, like Attachments in the document sidebar. `file_url` is the address of a file the user attached to the chat or may read.",
+	)
+	def attach_file(doctype: str, name: str, file_url: str) -> str:
+		return answer(lambda: request_approval(chat, "Attach", doctype, [name], {"file_url": file_url}))
+
 	@function_tool(strict_mode=False, name_override="submit_document", description_override="Submit a draft document.")
 	def submit_document(doctype: str, name: str) -> str:
 		return answer(lambda: request_approval(chat, "Submit", doctype, [name]))
@@ -121,4 +185,4 @@ def document_tools(chat: str | None) -> list[FunctionTool]:
 	def delete_documents(doctype: str, names: list[str]) -> str:
 		return answer(lambda: request_approval(chat, "Delete", doctype, names))
 
-	return [preview_document, open_prefilled_form, create_document, update_documents, submit_document, cancel_document, delete_documents]
+	return [preview_document, open_prefilled_form, create_document, update_documents, assign_documents, tag_documents, share_documents, attach_file, submit_document, cancel_document, delete_documents]

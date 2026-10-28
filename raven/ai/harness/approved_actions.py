@@ -1,10 +1,13 @@
-"""What happens when the user approves a card: Create a document, or Update, Submit, Cancel or Delete the listed ones. Every step is
+"""What happens when the user approves a card: Create a document, or Update, Assign, Tag, Share, Attach to, Submit, Cancel or Delete the listed ones. Every step is
 checked against the user's own permissions again at that moment, whatever was checked when the AI asked."""
 
 import json
 
 import frappe
 from frappe import _
+import frappe.share
+from frappe.desk.doctype.tag.tag import add_tag
+from frappe.desk.form import assign_to
 
 MAX_DOCUMENTS = 200
 PROTECTED_FIELDS = ("name", "owner", "creation", "modified", "modified_by", "docstatus", "doctype", "idx")
@@ -29,7 +32,7 @@ class ApprovedAction:
 			return self.create()
 		if len(self.names) > MAX_DOCUMENTS:
 			frappe.throw(_("At most {0} documents at a time.").format(MAX_DOCUMENTS))
-		change = {"Submit": self.submit, "Cancel": self.cancel, "Delete": self.delete, "Update": self.update}[self.action]
+		change = {"Submit": self.submit, "Cancel": self.cancel, "Delete": self.delete, "Update": self.update, "Assign": self.assign, "Tag": self.tag, "Share": self.share, "Attach": self.attach}[self.action]
 		for name in self.names:
 			change(name)
 		return _("{0} {1} done.").format(len(self.names), self.doctype)
@@ -54,6 +57,36 @@ class ApprovedAction:
 	def delete(self, name: str):
 		self.document(name, "delete")
 		frappe.delete_doc(self.doctype, name)
+
+	def assign(self, name: str):
+		"""Frappe's own Assign: an assignment ToDo for each user, with the sharing it needs. It checks the user's permission."""
+		assign_to.add({"doctype": self.doctype, "name": name, "assign_to": self.values["assign_to"]})
+
+	def tag(self, name: str):
+		self.document(name, "write")
+		for tag in self.values["tags"]:
+			add_tag(tag, self.doctype, name)
+
+	def share(self, name: str):
+		"""Frappe's Share, which checks that the user may share the document."""
+		for user in self.values["share_with"]:
+			frappe.share.add(self.doctype, name, user, read=1, write=int(bool(self.values.get("can_edit"))))
+
+	def attach(self, name: str):
+		"""Attach a file the user may read, as the sidebar's "attach from library" does."""
+		source = frappe.get_doc("File", {"file_url": self.values["file_url"]})
+		source.check_permission("read")
+		self.document(name, "write")
+		frappe.get_doc(
+			{
+				"doctype": "File",
+				"file_url": source.file_url,
+				"file_name": source.file_name,
+				"is_private": source.is_private,
+				"attached_to_doctype": self.doctype,
+				"attached_to_name": name,
+			}
+		).insert()
 
 	def update(self, name: str):
 		document = self.document(name, "write")
