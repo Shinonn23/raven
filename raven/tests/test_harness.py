@@ -11,6 +11,7 @@ from raven.ai.chatbot_stream import DATA_TOOL_NAME, specialist_tools
 from raven.ai.harness.action_log_hooks import ActionLogHooks
 from raven.ai.chatbot_stream import progress_reporter
 from raven.ai.harness.progress import harness_status
+from raven.ai.harness.document_cards import without_card_links
 from raven.ai.harness.document_drafts import DocumentDraft
 from raven.ai.harness.document_tools import document_tools, request_approval
 from raven.api.chatbot import get_chat
@@ -255,3 +256,19 @@ class TestHeldByTheHarness(IntegrationTestCase):
 		result = json.loads(self.call("save_draft", doctype="ToDo", values={"description": "Card me"}))
 		self.assertNotIn("link", result)
 		self.assertEqual(self.shown, [{"doctype": "ToDo", "docname": result["name"]}])
+
+
+class TestCardLinks(IntegrationTestCase):
+	DOCUMENTS = [{"doctype": "ToDo", "docname": "854mjnp51j"}]
+
+	def test_links_to_a_shown_document_are_removed_with_their_empty_line(self):
+		answer = "Created the draft.\n[Open ToDo](/app/todo/854mjnp51j)\nDone."
+		self.assertEqual(without_card_links(answer, self.DOCUMENTS), "Created the draft.\nDone.")
+
+	def test_a_link_inside_a_sentence_keeps_the_sentence(self):
+		answer = "See [the draft](https://erp.example.com/desk/todo/854mjnp51j) for details."
+		self.assertEqual(without_card_links(answer, self.DOCUMENTS), "See  for details.")
+
+	def test_other_links_stay(self):
+		answer = "[Manual](https://manual.example.com/page)\n[Other](/app/todo/zzz)"
+		self.assertEqual(without_card_links(answer, self.DOCUMENTS), answer)

@@ -6,6 +6,7 @@ from frappe.model.document import Document
 from raven.ai.chatbot_context import build_prompt, validate_attachments
 from raven.ai.chatbot_models import ChatbotChoice, resolve_choice
 from raven.ai.chatbot_stream import DeltaPublisher, stream_reply
+from raven.ai.harness.document_cards import without_card_links
 from raven.raven_ai.doctype.raven_chatbot_document_usage.raven_chatbot_document_usage import (
 	RavenChatbotDocumentUsage,
 )
@@ -84,7 +85,7 @@ def reply(chat: str, prompt: str, history: list[dict], model: str, effort: str |
 	doc.reload()
 	doc.append(
 		"messages",
-		{"role": "assistant", "content": answer, "documents": frappe.as_json(publisher.documents) if publisher.documents else None},
+		{"role": "assistant", "content": without_card_links(answer, publisher.documents), "documents": frappe.as_json(publisher.documents) if publisher.documents else None},
 	)
 	doc.flags.ignore_permissions = True
 	doc.save()
