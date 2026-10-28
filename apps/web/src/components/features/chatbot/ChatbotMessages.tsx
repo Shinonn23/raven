@@ -80,6 +80,9 @@ const AssistantMessage = ({ message }: { message: ChatbotMessage }) => {
                 <div className="text-p-base text-ink-gray-8">
                     <MarkdownRenderer content={message.content} className="tiptap chatbot-markdown" allowHtml={false} imageOrigins={imageOrigins} />
                 </div>
+                {message.documents?.map((document) => (
+                    <DocumentLinkRenderer key={`${document.doctype}:${document.docname}`} doctype={document.doctype} docname={document.docname} className="mt-1 w-96 max-w-full" />
+                ))}
             </div>
         </div>
     )

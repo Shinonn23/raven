@@ -230,9 +230,10 @@ class TestHeldByTheHarness(IntegrationTestCase):
 		frappe.set_user("Administrator")
 		self.chat = frappe.get_doc({"doctype": "Raven Chatbot Chat", "title": "Held"}).insert()
 		self.todo = frappe.get_doc({"doctype": "ToDo", "description": "Keep me"}).insert()
+		self.shown = []
 
 	def call(self, name, **arguments):
-		tool = next(tool for tool in document_tools(self.chat.name) if tool.name == name)
+		tool = next(tool for tool in document_tools(self.chat.name, self.shown) if tool.name == name)
 		text = json.dumps(arguments)
 		return asyncio.run(tool.on_invoke_tool(ToolContext(context=None, tool_name=name, tool_call_id="call", tool_arguments=text), text))
 
@@ -249,3 +250,8 @@ class TestHeldByTheHarness(IntegrationTestCase):
 	def test_the_card_text_comes_from_the_real_values(self):
 		self.call("update_documents", doctype="ToDo", names=[self.todo.name], values={"priority": "High", "owner": "x@example.com"})
 		self.assertEqual(get_chat(self.chat.name)["actions"][0]["summary"], "priority = High")
+
+	def test_a_saved_draft_is_collected_to_be_shown_as_a_card(self):
+		result = json.loads(self.call("save_draft", doctype="ToDo", values={"description": "Card me"}))
+		self.assertNotIn("link", result)
+		self.assertEqual(self.shown, [{"doctype": "ToDo", "docname": result["name"]}])

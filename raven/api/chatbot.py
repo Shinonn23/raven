@@ -23,6 +23,7 @@ def _serialize_chat(chat) -> dict:
 				"creation": str(message.creation),
 				"content": message.content,
 				"files": frappe.parse_json(message.files) if message.files else [],
+				"documents": frappe.parse_json(message.documents) if message.documents else [],
 				"document": message.link_doctype
 				and {"doctype": message.link_doctype, "docname": message.link_document},
 			}

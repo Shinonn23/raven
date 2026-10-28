@@ -70,8 +70,9 @@ def reply(chat: str, prompt: str, history: list[dict], model: str, effort: str |
 	"""Background job: stream the bot's answer to the user's browser, then save it as the assistant message."""
 	doc = frappe.get_doc("Raven Chatbot Chat", chat)
 	failed = False
+	publisher = DeltaPublisher(chat)
 	try:
-		answer = stream_reply(prompt, history, DeltaPublisher(chat), ChatbotChoice(model, effort))
+		answer = stream_reply(prompt, history, publisher, ChatbotChoice(model, effort))
 	except MaxTurnsExceeded:
 		answer = _("This took more steps than I am allowed to take in one go. Please ask for a smaller part of it and I will continue.")
 		failed = True
@@ -81,7 +82,10 @@ def reply(chat: str, prompt: str, history: list[dict], model: str, effort: str |
 		failed = True
 
 	doc.reload()
-	doc.append("messages", {"role": "assistant", "content": answer})
+	doc.append(
+		"messages",
+		{"role": "assistant", "content": answer, "documents": frappe.as_json(publisher.documents) if publisher.documents else None},
+	)
 	doc.flags.ignore_permissions = True
 	doc.save()
 	frappe.publish_realtime("chatbot_done", {"chat": chat, "failed": failed}, user=frappe.session.user)

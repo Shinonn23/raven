@@ -38,7 +38,8 @@ def request_approval(chat: str | None, action: str, doctype: str, names: list[st
 	return {"done": False, "status": "waiting for the user's decision"}
 
 
-def document_tools(chat: str | None) -> list[FunctionTool]:
+def document_tools(chat: str | None, shown: list[dict]) -> list[FunctionTool]:
+	"""`shown` collects the documents saved as drafts; the chat shows them as cards under the answer."""
 	drafts = DocumentDraft()
 
 	@function_tool(
@@ -55,10 +56,15 @@ def document_tools(chat: str | None) -> list[FunctionTool]:
 	@function_tool(
 		strict_mode=False,
 		name_override="save_draft",
-		description_override="Save a new draft, or changes to an existing draft (docstatus 0). Returns its name and link; give the link to the user.",
+		description_override="Save a new draft, or changes to an existing draft (docstatus 0).",
 	)
 	def save_draft(doctype: str, values: dict, name: str | None = None) -> str:
-		return answer(lambda: drafts.save(doctype, values, name))
+		def save():
+			saved = drafts.save(doctype, values, name)
+			shown.append({"doctype": doctype, "docname": saved["name"]})
+			return {"saved_as_draft": True, "name": saved["name"], "shown_to_user": "the user sees the document as a card"}
+
+		return answer(save)
 
 	@function_tool(
 		strict_mode=False,

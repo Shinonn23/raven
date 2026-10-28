@@ -79,6 +79,7 @@ class DeltaPublisher:
 
 	def __init__(self, chat: str):
 		self.chat = chat
+		self.documents: list[dict] = []
 		self.buffer = ""
 		self.last_flush = 0.0
 
@@ -162,17 +163,17 @@ def manual_assistant_tool(
 	)
 
 
-def harness_tools(access: str, chat: str | None) -> list:
+def harness_tools(access: str, publisher: "DeltaPublisher | None") -> list:
 	"""The data tools a Raven Bot's "Chatbot Data Access" level gives; the document tools include the data tools."""
 	if access == "Check data and prepare documents":
-		return [*data_tools(), *document_tools(chat)]
+		return [*data_tools(), *document_tools(publisher.chat if publisher else None, publisher.documents if publisher else [])]
 	return data_tools() if access == "Check data" else []
 
 
 def harness_assistant_tool(name: str, prompt_path: Path, access: str, description: str, choice, publisher, hooks):
 	"""An assistant agent with the data (and document) tools, called by the orchestrator like a specialist."""
 	agent = working_agent(name, HTML_COMMENT.sub("", prompt_path.read_text(encoding="utf-8")).strip(), ChatbotChoice(choice.model, SPECIALIST_EFFORT))
-	agent.tools = [*agent.tools, *harness_tools(access, publisher.chat if publisher else None)]
+	agent.tools = [*agent.tools, *harness_tools(access, publisher)]
 	return agent.as_tool(tool_name=tool_name_for(name).lower(), tool_description=description, max_turns=SPECIALIST_MAX_TURNS, hooks=hooks, on_stream=progress_reporter(publisher))
 
 
@@ -188,7 +189,7 @@ def specialist_tools(
 		name = tool_name_for(bot.name)
 		doc = frappe.get_doc("Raven Bot", bot.name)
 		agent = RavenAgentManager(doc).create_agent()
-		agent.tools = [*agent.tools, *harness_tools(doc.chatbot_data_access, publisher.chat if publisher else None)]
+		agent.tools = [*agent.tools, *harness_tools(doc.chatbot_data_access, publisher)]
 		tools.append(agent.as_tool(tool_name=name, tool_description=bot.description, max_turns=SPECIALIST_MAX_TURNS, hooks=hooks, on_stream=progress_reporter(publisher)))
 		names[name] = bot.name
 	if sources := configured_sources():
