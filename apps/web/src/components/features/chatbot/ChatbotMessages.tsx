@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react"
+import { Fragment, useEffect, useRef } from "react"
 import dayjs from "dayjs"
 import { BotMessageSquareIcon } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@components/ui/avatar"
@@ -13,7 +13,7 @@ import { DocumentLinkRenderer } from "@components/features/message/renderers/Doc
 import { ChatbotActionCard } from "./ChatbotActionCard"
 import { ChatbotAttachmentCard } from "./ChatbotAttachmentCard"
 import { useManualImageOrigins } from "./useChatbotChoice"
-import type { ChatbotMessage, ChatbotPendingAction } from "./types"
+import type { ChatbotAction, ChatbotMessage } from "./types"
 
 const AssistantAvatar = () => (
     <Avatar className="size-8 rounded">
@@ -96,10 +96,17 @@ const MessageRow = ({ message }: { message: ChatbotMessage }) => {
     return isMine ? <OwnMessage message={message} /> : <OtherPersonMessage message={message} />
 }
 
+/** The card belongs under the answer the AI gave when it asked; -1 while that answer is still being written. */
+const cardIndex = (action: ChatbotAction, messages: ChatbotMessage[]) =>
+    messages.findIndex((message) => message.role === "assistant" && (message.creation ?? "") >= action.creation)
+
+const cardsAfter = (index: number, messages: ChatbotMessage[], actions: ChatbotAction[]) =>
+    actions.filter((action) => cardIndex(action, messages) === index)
+
 interface ChatbotMessagesProps {
     messages: ChatbotMessage[]
-    /** Changes the AI asked to make, waiting for the user's answer. */
-    actions?: ChatbotPendingAction[]
+    /** Changes the AI asked to make, waiting for the user's answer or already answered. */
+    actions?: ChatbotAction[]
     chatId?: string
     /** The message just sent, before the server has confirmed it. */
     pendingText: string | null
@@ -121,8 +128,13 @@ export const ChatbotMessages = ({ messages, actions = [], chatId, pendingText, s
             {messages.length === 0 && !pendingText && streamingText === null && (
                 <p className="px-4 py-2 text-xs text-ink-gray-5">{_("This is the start of your conversation with Raven AI. Ask anything, or type / for skills.")}</p>
             )}
-            {messages.map((message, index) => <MessageRow key={index} message={message} />)}
-            {chatId && actions.map((action) => <ChatbotActionCard key={action.name} chatId={chatId} action={action} />)}
+            {messages.map((message, index) => (
+                <Fragment key={index}>
+                    <MessageRow message={message} />
+                    {chatId && cardsAfter(index, messages, actions).map((action) => <ChatbotActionCard key={action.name} chatId={chatId} action={action} />)}
+                </Fragment>
+            ))}
+            {chatId && actions.filter((action) => cardIndex(action, messages) === -1).map((action) => <ChatbotActionCard key={action.name} chatId={chatId} action={action} />)}
             {pendingText && <MessageRow message={{ role: "user", content: pendingText, creation: new Date().toISOString() }} />}
             {streamingText ? <MessageRow message={{ role: "assistant", content: streamingText, creation: new Date().toISOString() }} /> : null}
             {(pendingText || streamingText !== null) && <div className="flex items-center gap-3 px-4 py-2 pl-[3.75rem] text-p-sm text-ink-gray-5"><Spinner className="size-4" />{status ?? _("Thinking…")}</div>}

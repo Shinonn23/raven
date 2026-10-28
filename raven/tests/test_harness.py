@@ -198,6 +198,12 @@ class TestDocuments(IntegrationTestCase):
 		self.ask("Delete", [self.todo().name])
 		self.assertEqual([card["action"] for card in get_chat(self.chat.name)["actions"]], ["Delete"])
 
+	def test_answered_cards_stay_with_their_outcome(self):
+		approved, rejected = self.ask("Delete", [self.todo().name]), self.ask("Delete", [self.todo().name])
+		approved.decide(True)
+		rejected.decide(False)
+		self.assertEqual([card["status"] for card in get_chat(self.chat.name)["actions"]], ["Approved", "Rejected"])
+
 
 class TestProgressLines(IntegrationTestCase):
 	def test_lines_name_the_work_but_not_the_values(self):

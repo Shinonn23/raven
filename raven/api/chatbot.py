@@ -15,7 +15,7 @@ def _serialize_chat(chat) -> dict:
 		"project": chat.project,
 		"owner": chat.owner,
 		"can_write": chat.has_permission("write"),
-		"actions": _pending_actions(chat.name),
+		"actions": _actions(chat.name),
 		"messages": [
 			{
 				"role": message.role,
@@ -32,12 +32,12 @@ def _serialize_chat(chat) -> dict:
 	}
 
 
-def _pending_actions(chat: str) -> list[dict]:
-	"""The cards of this chat that wait for the user (only their own are visible to them)."""
+def _actions(chat: str) -> list[dict]:
+	"""The approval cards of this chat, waiting or answered, oldest first (a user sees only the ones asked of them)."""
 	return frappe.get_list(
 		"Raven AI Pending Action",
-		filters={"chat": chat, "status": "Pending"},
-		fields=["name", "action", "reference_doctype", "names", "values", "summary"],
+		filters={"chat": chat},
+		fields=["name", "action", "reference_doctype", "names", "values", "summary", "status", "result", "creation"],
 		order_by="creation asc",
 	)
 
