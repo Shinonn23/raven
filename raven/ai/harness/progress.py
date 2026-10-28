@@ -30,6 +30,7 @@ def harness_status(tool_name: str, arguments: str) -> str | None:
 		"untag_documents": lambda: _("Asking you to approve: Untag {0}").format(doctype),
 		"unshare_documents": lambda: _("Asking you to approve: Unshare {0}").format(doctype),
 		"detach_files": lambda: _("Asking you to approve: Remove an attachment from {0}").format(doctype),
+		"ask_user": lambda: _("Asking you a question…"),
 		"submit_document": lambda: _("Asking you to approve: Submit {0}").format(doctype),
 		"cancel_document": lambda: _("Asking you to approve: Cancel {0}").format(doctype),
 		"delete_documents": lambda: _("Asking you to approve: Delete {0}").format(doctype),

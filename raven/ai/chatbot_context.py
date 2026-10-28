@@ -59,8 +59,9 @@ ATTACHED_ONLY_REQUEST = (
 )
 
 
-def build_prompt(text: str, files: list[dict], document: dict | None) -> str:
-	parts = [text or ATTACHED_ONLY_REQUEST]
+def build_prompt(text: str, files: list[dict], document: dict | None, reply_to: str | None = None) -> str:
+	parts = [f'(You had asked the user: "{reply_to}")'] if reply_to else []
+	parts.append(text or ATTACHED_ONLY_REQUEST)
 	if document:
 		parts.append(document_context(document["doctype"], document["docname"]))
 	parts.extend(file_context(file["file_url"]) for file in files)

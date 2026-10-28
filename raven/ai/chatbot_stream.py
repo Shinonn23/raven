@@ -17,6 +17,7 @@ from raven.ai.harness.action_log_hooks import ActionLogHooks
 from raven.ai.harness.data_tools import data_tools
 from raven.ai.harness.document_tools import document_tools
 from raven.ai.harness.progress import harness_status
+from raven.ai.harness.question_tools import question_tool
 from raven.ai.manual_sources import ManualSource, configured_sources
 from raven.ai.manual_tools import manual_status, manual_tools
 
@@ -163,10 +164,11 @@ def manual_assistant_tool(
 
 
 def harness_tools(access: str, publisher: "DeltaPublisher | None") -> list:
-	"""The data tools a Raven Bot's "Chatbot Data Access" level gives; the document tools include the data tools."""
+	"""The tools a Raven Bot's "Chatbot Data Access" level gives; the document tools include the data tools. All may ask the user."""
+	chat = publisher.chat if publisher else None
 	if access == "Check data and prepare documents":
-		return [*data_tools(), *document_tools(publisher.chat if publisher else None)]
-	return data_tools() if access == "Check data" else []
+		return [*data_tools(), *document_tools(chat), question_tool(chat)]
+	return [*data_tools(), question_tool(chat)] if access == "Check data" else []
 
 
 def harness_assistant_tool(name: str, prompt_path: Path, access: str, description: str, choice, publisher, hooks):
@@ -210,7 +212,7 @@ def build_orchestrator(
 	"""The central agent: Raven Settings' model and instruction, with the specialists as its tools."""
 	agent = working_agent("Raven AI", build_instruction(), choice)
 	tools, names = specialist_tools(choice, publisher, hooks)
-	agent.tools = [*agent.tools, *tools]
+	agent.tools = [*agent.tools, *tools, question_tool(publisher.chat if publisher else None)]
 	return agent, names
 
 

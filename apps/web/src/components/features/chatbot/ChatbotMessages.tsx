@@ -11,9 +11,10 @@ import { cn } from "@lib/utils"
 import _ from "@lib/translate"
 import { DocumentLinkRenderer } from "@components/features/message/renderers/DocumentLinkRenderer"
 import { ChatbotActionCard } from "./ChatbotActionCard"
+import { ChatbotQuestionCard } from "./ChatbotQuestionCard"
 import { ChatbotAttachmentCard } from "./ChatbotAttachmentCard"
 import { useManualImageOrigins } from "./useChatbotChoice"
-import type { ChatbotAction, ChatbotMessage } from "./types"
+import type { ChatbotAction, ChatbotMessage, ChatbotQuestion } from "./types"
 
 const AssistantAvatar = () => (
     <Avatar className="size-8 rounded">
@@ -93,17 +94,19 @@ const MessageRow = ({ message }: { message: ChatbotMessage }) => {
     return isMine ? <OwnMessage message={message} /> : <OtherPersonMessage message={message} />
 }
 
-/** A card belongs under the answer that followed the messages the chat had when it was asked; a position past the last message
- *  (the answer is still being written) puts it at the end. */
-const cardPosition = (action: ChatbotAction, messages: ChatbotMessage[]) => Math.min(action.message_position, messages.length)
+/** A card or question belongs under the answer that followed the messages the chat had when it was asked; a position past the last
+ *  message (the answer is still being written) puts it at the end. */
+const positionOf = (item: { message_position: number }, messages: ChatbotMessage[]) => Math.min(item.message_position, messages.length)
 
-const cardsAfter = (index: number, messages: ChatbotMessage[], actions: ChatbotAction[]) =>
-    actions.filter((action) => cardPosition(action, messages) === index)
+const placedAt = <T extends { message_position: number }>(index: number, messages: ChatbotMessage[], items: T[]) =>
+    items.filter((item) => positionOf(item, messages) === index)
 
 interface ChatbotMessagesProps {
     messages: ChatbotMessage[]
     /** Changes the AI asked to make, waiting for the user's answer or already answered. */
     actions?: ChatbotAction[]
+    /** Questions the AI asked the user, waiting or answered. */
+    questions?: ChatbotQuestion[]
     chatId?: string
     /** The message just sent, before the server has confirmed it. */
     pendingText: string | null
@@ -113,12 +116,12 @@ interface ChatbotMessagesProps {
     status?: string
 }
 
-export const ChatbotMessages = ({ messages, actions = [], chatId, pendingText, streamingText, status }: ChatbotMessagesProps) => {
+export const ChatbotMessages = ({ messages, actions = [], questions = [], chatId, pendingText, streamingText, status }: ChatbotMessagesProps) => {
     const bottomRef = useRef<HTMLDivElement>(null)
     // A block body on purpose: an effect must not return a value (React would call it as the cleanup).
     useEffect(() => {
         bottomRef.current?.scrollIntoView({ block: "end" })
-    }, [messages.length, actions.length, pendingText, streamingText, status])
+    }, [messages.length, actions.length, questions.length, pendingText, streamingText, status])
 
     return (
         <div className="min-h-0 flex-1 overflow-y-auto py-2">
@@ -128,10 +131,12 @@ export const ChatbotMessages = ({ messages, actions = [], chatId, pendingText, s
             {messages.map((message, index) => (
                 <Fragment key={index}>
                     <MessageRow message={message} />
-                    {chatId && cardsAfter(index, messages, actions).map((action) => <ChatbotActionCard key={action.name} chatId={chatId} action={action} />)}
+                    {chatId && placedAt(index, messages, actions).map((action) => <ChatbotActionCard key={action.name} chatId={chatId} action={action} />)}
+                    {chatId && placedAt(index, messages, questions).map((question) => <ChatbotQuestionCard key={question.name} chatId={chatId} question={question} />)}
                 </Fragment>
             ))}
-            {chatId && cardsAfter(messages.length, messages, actions).map((action) => <ChatbotActionCard key={action.name} chatId={chatId} action={action} />)}
+            {chatId && placedAt(messages.length, messages, actions).map((action) => <ChatbotActionCard key={action.name} chatId={chatId} action={action} />)}
+            {chatId && placedAt(messages.length, messages, questions).map((question) => <ChatbotQuestionCard key={question.name} chatId={chatId} question={question} />)}
             {pendingText && <MessageRow message={{ role: "user", content: pendingText, creation: new Date().toISOString() }} />}
             {streamingText ? <MessageRow message={{ role: "assistant", content: streamingText, creation: new Date().toISOString() }} /> : null}
             {(pendingText || streamingText !== null) && <div className="flex items-center gap-3 px-4 py-2 pl-[3.75rem] text-p-sm text-ink-gray-5"><Spinner className="size-4" />{status ?? _("Thinking…")}</div>}

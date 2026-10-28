@@ -28,7 +28,9 @@ from raven.ai.chatbot_stream import (
 	default_instruction,
 )
 from raven.api.upload_file import get_attachable_files
+from raven.ai.harness.question_tools import ask
 from raven.api.chatbot import (
+	answer_question,
 	get_chat_shares,
 	get_chatbot_options,
 	share_chat,
@@ -317,6 +319,54 @@ class TestChatbotPictures(TestChatbot):
 		self.assertEqual(ask_agent.call_args_list[0].args[4][0]["type"], "input_image")
 
 
+class TestChatbotQuestions(TestChatbot):
+	"""The AI asks the user a question; the answer comes back as the user's next message."""
+
+	__test__ = True
+
+	def ask(self, chat, options=("Assigned To", "Owner")):
+		return ask(chat, "Which field should I put them in?", list(options))
+
+	def test_a_question_is_shown_once_with_its_choices_and_position(self):
+		with bot_answers():
+			chat = send_message("assign it")["name"]
+		self.ask(chat)
+		self.ask(chat)
+		questions = get_chat(chat)["questions"]
+		self.assertEqual(len(questions), 1)
+		self.assertEqual((json.loads(questions[0]["options"]), questions[0]["message_position"]), (["Assigned To", "Owner"], 2))
+
+	def test_options_are_trimmed_and_limited(self):
+		with bot_answers():
+			chat = send_message("x")["name"]
+		self.ask(chat, [" A ", "", "B", "C", "D", "E", "F", "G"])
+		self.assertEqual(json.loads(get_chat(chat)["questions"][0]["options"]), ["A", "B", "C", "D", "E", "F"])
+
+	def test_the_answer_is_sent_as_the_next_message_and_the_ai_sees_the_question(self):
+		with bot_answers() as ask_agent:
+			chat = send_message("assign it")["name"]
+			self.ask(chat)
+			question = get_chat(chat)["questions"][0]["name"]
+			result = answer_question(question, "Assigned To")
+
+		self.assertEqual([m["content"] for m in result["messages"] if m["role"] == "user"], ["assign it", "Assigned To"])
+		prompt = ask_agent.call_args_list[-1].args[0]
+		self.assertIn("Which field should I put them in?", prompt)
+		self.assertTrue(prompt.rstrip().endswith("Assigned To"))
+		self.assertEqual([(q["status"], q["answer"]) for q in get_chat(chat)["questions"]], [("Answered", "Assigned To")])
+
+	def test_a_question_is_answered_once_and_only_by_its_owner(self):
+		with bot_answers():
+			chat = send_message("x")["name"]
+			self.ask(chat)
+			question = get_chat(chat)["questions"][0]["name"]
+			self.assertRaises(frappe.ValidationError, answer_question, question, "   ")
+			answer_question(question, "my own words")
+			self.assertRaises(frappe.ValidationError, answer_question, question, "again")
+		frappe.set_user(STRANGER)
+		self.assertRaises(frappe.PermissionError, answer_question, question, "mine")
+
+
 class TestChatbotSharing(TestChatbot):
 	__test__ = True
 
@@ -436,7 +486,7 @@ class TestChatbotOrchestrator(TestChatbot):
 
 		agent, names = self.build()
 
-		self.assertEqual({tool.name for tool in agent.tools}, {"Accounting_Helper"})
+		self.assertEqual({tool.name for tool in agent.tools}, {"Accounting_Helper", "ask_user"})
 		self.assertEqual(names, {"Accounting_Helper": "Accounting Helper"})
 		self.assertEqual(agent.tools[0].description, "Answers questions about invoices")
 

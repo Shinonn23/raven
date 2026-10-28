@@ -16,6 +16,7 @@ def _serialize_chat(chat) -> dict:
 		"owner": chat.owner,
 		"can_write": chat.has_permission("write"),
 		"actions": _actions(chat.name),
+		"questions": _questions(chat.name),
 		"messages": [
 			{
 				"role": message.role,
@@ -39,6 +40,27 @@ def _actions(chat: str) -> list[dict]:
 		fields=["name", "action", "reference_doctype", "names", "values", "summary", "status", "result", "message_position"],
 		order_by="creation asc",
 	)
+
+
+def _questions(chat: str) -> list[dict]:
+	"""The questions the AI asked in this chat, waiting or answered, oldest first (a user sees only their own)."""
+	return frappe.get_list(
+		"Raven AI Question",
+		filters={"chat": chat},
+		fields=["name", "question", "options", "status", "answer", "message_position"],
+		order_by="creation asc",
+	)
+
+
+@frappe.whitelist(methods=["POST"])
+def answer_question(question: str, answer: str, model: str | None = None, effort: str | None = None) -> dict:
+	"""Answer a question of the AI. The answer is also sent as the user's next message, so the AI carries on from it."""
+	asked = frappe.get_doc("Raven AI Question", question)
+	asked.check_permission("write")
+	chat = frappe.get_doc("Raven Chatbot Chat", asked.chat)
+	chat.check_permission("write")
+	chat.add_user_message(asked.answer_with(answer), model=model, effort=effort, reply_to=asked.question)
+	return _serialize_chat(chat)
 
 
 @frappe.whitelist(methods=["POST"])

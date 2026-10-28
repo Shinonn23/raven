@@ -4,6 +4,7 @@ import { useFrappeGetCall, useFrappePostCall, useSWRConfig } from "frappe-react-
 import _ from "@lib/translate"
 import { errorResponseToast } from "@components/ui/error-banner"
 import { useChatbot } from "./useChatbot"
+import { useChatbotChoice } from "./useChatbotChoice"
 import { chatbotStreamsAtom } from "./useChatbotStream"
 import type { ChatbotChat, ChatbotOutgoingMessage, ChatbotShare } from "./types"
 
@@ -80,4 +81,30 @@ export const useDecideChatbotAction = (chatId: string) => {
     }
 
     return { decide, busy }
+}
+
+/** Answer a question of the AI with a choice or the user's own words. The answer becomes their next message and the AI carries on. */
+export const useAnswerChatbotQuestion = (chatId: string) => {
+    const { call } = useFrappePostCall<{ message: ChatbotChat }>("raven.api.chatbot.answer_question")
+    const { mutate } = useSWRConfig()
+    const { refresh } = useChatbot()
+    const { choice } = useChatbotChoice()
+    const setStreams = useSetAtom(chatbotStreamsAtom)
+    const [busy, setBusy] = useState(false)
+
+    const answer = async (question: string, text: string) => {
+        setBusy(true)
+        try {
+            const { message: chat } = await call({ question, answer: text, model: choice?.model, effort: choice?.effort })
+            setStreams((streams) => ({ ...streams, [chatId]: "" }))
+            await mutate(chatKey(chatId), { message: chat }, { revalidate: false })
+            await refresh()
+        } catch (error) {
+            errorResponseToast(_("Could not send your answer"), error as never)
+            await mutate(chatKey(chatId))
+        }
+        setBusy(false)
+    }
+
+    return { answer, busy }
 }
