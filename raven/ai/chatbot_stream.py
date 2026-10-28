@@ -24,6 +24,8 @@ FLUSH_INTERVAL_SECONDS = 0.1
 # The assistant works in a loop until the task is done; these only stop a loop that never ends.
 MAX_TURNS = 40
 SPECIALIST_MAX_TURNS = 25
+# The data and document assistants look things up with tools; thinking long about each step only makes them slow.
+SPECIALIST_EFFORT = "low"
 
 PROMPTS = Path(__file__).parent / "prompts"
 ASSISTANT_PROMPT_PATH = PROMPTS / "chatbot_assistant.md"
@@ -43,7 +45,7 @@ DATA_TOOL_DESCRIPTION = (
 DOCUMENT_TOOL_NAME = "document_assistant"
 DOCUMENT_TOOL_DESCRIPTION = (
 	"Prepares documents for the user: checks values the way saving would, saves drafts, opens a filled form, and asks the user to approve "
-	"anything hard to undo (submit, cancel, delete, bulk change). It can also check data. Give it the whole task with the values you know."
+	"anything hard to undo (submit, cancel, delete, bulk change). It can also check data. Give it the whole task in one call, including finding the documents; it looks them up itself."
 )
 HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 
@@ -134,7 +136,7 @@ def progress_reporter(publisher: "DeltaPublisher | None"):
 	"""A stream handler for a specialist: shows each tool it starts as a line in the chat."""
 
 	async def show_progress(event):
-		inner = event.event
+		inner = event["event"]
 		if publisher and inner.type == "run_item_stream_event" and inner.item.type == "tool_call_item":
 			raw = inner.item.raw_item
 			if line := tool_status(getattr(raw, "name", ""), getattr(raw, "arguments", "")):
@@ -169,7 +171,7 @@ def harness_tools(access: str, chat: str | None) -> list:
 
 def harness_assistant_tool(name: str, prompt_path: Path, access: str, description: str, choice, publisher, hooks):
 	"""An assistant agent with the data (and document) tools, called by the orchestrator like a specialist."""
-	agent = working_agent(name, HTML_COMMENT.sub("", prompt_path.read_text(encoding="utf-8")).strip(), choice)
+	agent = working_agent(name, HTML_COMMENT.sub("", prompt_path.read_text(encoding="utf-8")).strip(), ChatbotChoice(choice.model, SPECIALIST_EFFORT))
 	agent.tools = [*agent.tools, *harness_tools(access, publisher.chat if publisher else None)]
 	return agent.as_tool(tool_name=tool_name_for(name).lower(), tool_description=description, max_turns=SPECIALIST_MAX_TURNS, hooks=hooks, on_stream=progress_reporter(publisher))
 

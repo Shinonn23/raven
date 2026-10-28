@@ -8,6 +8,7 @@ from frappe.tests import IntegrationTestCase
 from raven.ai.chatbot_models import ChatbotChoice
 from raven.ai.chatbot_stream import DATA_TOOL_NAME, specialist_tools
 from raven.ai.harness.action_log_hooks import ActionLogHooks
+from raven.ai.chatbot_stream import progress_reporter
 from raven.ai.harness.progress import harness_status
 from raven.ai.harness.document_drafts import DocumentDraft
 from raven.ai.harness.document_tools import request_approval
@@ -210,3 +211,12 @@ class TestProgressLines(IntegrationTestCase):
 		self.assertEqual(harness_status("ask_user_to_approve", args), "Asking you to approve: Delete ToDo")
 		self.assertIsNone(harness_status("something_else", args))
 		self.assertIsNone(harness_status("list_documents", "not json"))
+
+	def test_the_reporter_reads_the_dict_events_the_sdk_sends(self):
+		lines = []
+		publisher = SimpleNamespace(status=lines.append)
+		raw = SimpleNamespace(name="save_draft", arguments=json.dumps({"doctype": "ToDo"}))
+		event = {"event": SimpleNamespace(type="run_item_stream_event", item=SimpleNamespace(type="tool_call_item", raw_item=raw)), "agent": None}
+		asyncio.run(progress_reporter(publisher)(event))
+		asyncio.run(progress_reporter(publisher)({"event": SimpleNamespace(type="raw_response_event"), "agent": None}))
+		self.assertEqual(lines, ["Saving a draft of ToDo…"])
