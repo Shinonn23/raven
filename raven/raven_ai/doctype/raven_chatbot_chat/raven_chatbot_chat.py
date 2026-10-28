@@ -15,6 +15,13 @@ REPLY_TIMEOUT_SECONDS = 600
 
 
 class RavenChatbotChat(Document):
+	@staticmethod
+	def attachment_title(files: list[dict], document: dict | None) -> str:
+		"""A chat that starts with only an attachment is named after it."""
+		if document:
+			return f"{document['doctype']} {document['docname']}"
+		return files[0].get("file_name") or "" if files else ""
+
 	def add_user_message(
 		self,
 		text: str,
@@ -41,7 +48,7 @@ class RavenChatbotChat(Document):
 			},
 		)
 		if not self.title:
-			self.title = text.strip().replace("\n", " ")[:TITLE_MAX_LENGTH]
+			self.title = (text or self.attachment_title(files, document)).strip().replace("\n", " ")[:TITLE_MAX_LENGTH]
 		self.save()
 
 		frappe.enqueue(

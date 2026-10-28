@@ -178,6 +178,17 @@ class TestChatbotAttachmentsAndSkills(TestChatbot):
 		recommended = get_recommended_documents()
 		self.assertEqual((recommended[0]["docname"], recommended[0]["use_count"]), (note.name, 2))
 
+	def test_a_document_alone_can_be_sent_without_a_message(self):
+		note = self.make_note()
+		with bot_answers() as ask_agent:
+			chat = send_message("", document={"doctype": "Note", "docname": note.name})
+
+		self.assertEqual(chat["messages"][0]["content"], "")
+		self.assertEqual(chat["title"], f"Note {note.name}"[:40])
+		prompt = ask_agent.call_args_list[0].args[0]
+		self.assertIn("without writing a message", prompt)
+		self.assertIn("launch plan", prompt)
+
 	def test_cannot_attach_a_document_the_user_cannot_read(self):
 		note = self.make_note()
 		frappe.set_user(STRANGER)

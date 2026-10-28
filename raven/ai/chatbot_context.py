@@ -30,8 +30,13 @@ def file_context(file_url: str) -> str:
 	return _clip(f"Attached file {file.file_name}:\n{content}")
 
 
+ATTACHED_ONLY_REQUEST = (
+	"The user attached this without writing a message. Look at it, say briefly what it is, and offer what you can do with it."
+)
+
+
 def build_prompt(text: str, files: list[dict], document: dict | None) -> str:
-	parts = [text]
+	parts = [text or ATTACHED_ONLY_REQUEST]
 	if document:
 		parts.append(document_context(document["doctype"], document["docname"]))
 	parts.extend(file_context(file["file_url"]) for file in files)

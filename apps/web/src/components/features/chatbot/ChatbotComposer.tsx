@@ -46,7 +46,8 @@ export const ChatbotComposer = ({ onSend, disabled, draftKey }: ChatbotComposerP
 
     const query = slashQuery(text)
     const slashMatches = query === null ? [] : matchingSkills(skills, query)
-    const canSend = text.trim().length > 0 && !disabled
+    const hasContent = text.trim().length > 0 || files.length > 0 || document !== null
+    const canSend = hasContent && !disabled
 
     const send = () => {
         if (!canSend) return

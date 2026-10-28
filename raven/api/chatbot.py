@@ -83,7 +83,7 @@ def send_message(
 	"""Send a message to the chatbot; creates the chat when `chat` is not given.
 	Returns right away with the saved question; the answer streams over realtime and is saved when done."""
 	text = (text or "").strip()
-	if not text:
+	if not (text or files or document):
 		frappe.throw(_("Message cannot be empty"))
 
 	if chat:

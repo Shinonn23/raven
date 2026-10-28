@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react"
 import dayjs from "dayjs"
-import { BotMessageSquareIcon, FileBoxIcon } from "lucide-react"
+import { BotMessageSquareIcon } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@components/ui/avatar"
 import MarkdownRenderer from "@components/ui/markdown"
 import { Spinner } from "@components/ui/spinner"
@@ -9,6 +9,7 @@ import { useUserCookieData } from "@hooks/useUserCookieData"
 import { siteUrl } from "@lib/site"
 import { cn } from "@lib/utils"
 import _ from "@lib/translate"
+import { DocumentLinkRenderer } from "@components/features/message/renderers/DocumentLinkRenderer"
 import { ChatbotActionCard } from "./ChatbotActionCard"
 import { ChatbotAttachmentCard } from "./ChatbotAttachmentCard"
 import { useManualImageOrigins } from "./useChatbotChoice"
@@ -20,13 +21,10 @@ const AssistantAvatar = () => (
     </Avatar>
 )
 
+/** An attached system document is the same card as in a channel: its main fields, and a click opens it. */
 const Attachments = ({ message, alignRight }: { message: ChatbotMessage; alignRight?: boolean }) => (
     <div className={cn("mt-1 flex flex-wrap gap-2", alignRight && "justify-end")}>
-        {message.document && (
-            <span className="flex items-center gap-1 rounded border border-outline-gray-2 px-2 py-1 text-xs text-ink-gray-7">
-                <FileBoxIcon className="size-3" />{message.document.doctype} · {message.document.docname}
-            </span>
-        )}
+        {message.document && <DocumentLinkRenderer doctype={message.document.doctype} docname={message.document.docname} className="w-96 max-w-full" />}
         {message.files?.map((file) => <ChatbotAttachmentCard key={file.file_url} file={file} className="h-36 w-36" />)}
     </div>
 )
@@ -40,7 +38,7 @@ const OwnMessage = ({ message }: { message: ChatbotMessage }) => (
     <div className="flex flex-col items-end gap-0.5 px-4 py-2">
         <span className="text-xs text-ink-gray-4">{dayjs(message.creation).format("hh:mm a")}</span>
         <div className="flex max-w-[88%] flex-col items-end md:max-w-[70%]">
-            <Bubble>{message.content}</Bubble>
+            {message.content && <Bubble>{message.content}</Bubble>}
             <Attachments message={message} alignRight />
         </div>
     </div>
@@ -61,7 +59,7 @@ const OtherPersonMessage = ({ message }: { message: ChatbotMessage }) => {
                     <span className="text-sm font-semibold text-ink-gray-8">{name}</span>
                     <span className="text-xs text-ink-gray-4">{dayjs(message.creation).format("hh:mm a")}</span>
                 </div>
-                <Bubble>{message.content}</Bubble>
+                {message.content && <Bubble>{message.content}</Bubble>}
                 <Attachments message={message} />
             </div>
         </div>
