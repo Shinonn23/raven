@@ -16,6 +16,7 @@ from raven.ai.chatbot_models import ChatbotChoice
 from raven.ai.harness.action_log_hooks import ActionLogHooks
 from raven.ai.harness.data_tools import data_tools
 from raven.ai.harness.document_tools import document_tools
+from raven.ai.harness.progress import harness_status
 from raven.ai.manual_sources import ManualSource, configured_sources
 from raven.ai.manual_tools import manual_status, manual_tools
 
@@ -125,6 +126,23 @@ def manual_instruction() -> str:
 	return HTML_COMMENT.sub("", MANUAL_PROMPT_PATH.read_text(encoding="utf-8")).strip()
 
 
+def tool_status(tool_name: str, arguments: str) -> str | None:
+	return manual_status(tool_name, arguments) or harness_status(tool_name, arguments)
+
+
+def progress_reporter(publisher: "DeltaPublisher | None"):
+	"""A stream handler for a specialist: shows each tool it starts as a line in the chat."""
+
+	async def show_progress(event):
+		inner = event.event
+		if publisher and inner.type == "run_item_stream_event" and inner.item.type == "tool_call_item":
+			raw = inner.item.raw_item
+			if line := tool_status(getattr(raw, "name", ""), getattr(raw, "arguments", "")):
+				publisher.status(line)
+
+	return show_progress
+
+
 def manual_assistant_tool(
 	sources: list[ManualSource], choice: ChatbotChoice, publisher: "DeltaPublisher | None" = None, hooks: ActionLogHooks | None = None
 ):
@@ -133,19 +151,11 @@ def manual_assistant_tool(
 	listing = "\n".join(f"- {source.name}: {source.description}" for source in sources)
 	agent = working_agent("Manual Assistant", f"{manual_instruction()}\n\n# Sources\n\n{listing}", ChatbotChoice(choice.model, None))
 	agent.tools = [*agent.tools, *manual_tools(sources)]
-
-	async def show_progress(event):
-		inner = event.event
-		if publisher and inner.type == "run_item_stream_event" and inner.item.type == "tool_call_item":
-			raw = inner.item.raw_item
-			if line := manual_status(getattr(raw, "name", ""), getattr(raw, "arguments", "")):
-				publisher.status(line)
-
 	return agent.as_tool(
 		tool_name=MANUAL_TOOL_NAME,
 		tool_description=MANUAL_TOOL_DESCRIPTION,
 		max_turns=SPECIALIST_MAX_TURNS,
-		on_stream=show_progress,
+		on_stream=progress_reporter(publisher),
 		hooks=hooks,
 	)
 
@@ -161,7 +171,7 @@ def harness_assistant_tool(name: str, prompt_path: Path, access: str, descriptio
 	"""An assistant agent with the data (and document) tools, called by the orchestrator like a specialist."""
 	agent = working_agent(name, HTML_COMMENT.sub("", prompt_path.read_text(encoding="utf-8")).strip(), choice)
 	agent.tools = [*agent.tools, *harness_tools(access, publisher.chat if publisher else None)]
-	return agent.as_tool(tool_name=tool_name_for(name).lower(), tool_description=description, max_turns=SPECIALIST_MAX_TURNS, hooks=hooks)
+	return agent.as_tool(tool_name=tool_name_for(name).lower(), tool_description=description, max_turns=SPECIALIST_MAX_TURNS, hooks=hooks, on_stream=progress_reporter(publisher))
 
 
 def specialist_tools(
@@ -177,7 +187,7 @@ def specialist_tools(
 		doc = frappe.get_doc("Raven Bot", bot.name)
 		agent = RavenAgentManager(doc).create_agent()
 		agent.tools = [*agent.tools, *harness_tools(doc.chatbot_data_access, publisher.chat if publisher else None)]
-		tools.append(agent.as_tool(tool_name=name, tool_description=bot.description, max_turns=SPECIALIST_MAX_TURNS, hooks=hooks))
+		tools.append(agent.as_tool(tool_name=name, tool_description=bot.description, max_turns=SPECIALIST_MAX_TURNS, hooks=hooks, on_stream=progress_reporter(publisher)))
 		names[name] = bot.name
 	if sources := configured_sources():
 		tools.append(manual_assistant_tool(sources, choice, publisher, hooks))

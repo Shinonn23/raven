@@ -85,9 +85,11 @@ class TestChatbot(IntegrationTestCase):
 
 	@staticmethod
 	def no_manual_sources():
-		"""The tests start from a site with no manual source, whatever the real site has set (the rollback restores it)."""
+		"""The tests start from a site with no manual source and no data or document assistant, whatever the real site has set
+		(the rollback restores it)."""
 		settings = frappe.get_doc("Raven Settings")
 		settings.set("manual_sources", [])
+		settings.chatbot_data_assistant = settings.chatbot_document_assistant = 0
 		settings.flags.ignore_permissions = True
 		settings.save()
 		frappe.clear_document_cache("Raven Settings", "Raven Settings")

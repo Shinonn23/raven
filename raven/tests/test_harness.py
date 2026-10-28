@@ -8,6 +8,7 @@ from frappe.tests import IntegrationTestCase
 from raven.ai.chatbot_models import ChatbotChoice
 from raven.ai.chatbot_stream import DATA_TOOL_NAME, specialist_tools
 from raven.ai.harness.action_log_hooks import ActionLogHooks
+from raven.ai.harness.progress import harness_status
 from raven.ai.harness.document_drafts import DocumentDraft
 from raven.ai.harness.document_tools import request_approval
 from raven.api.chatbot import get_chat
@@ -193,3 +194,19 @@ class TestDocuments(IntegrationTestCase):
 	def test_chat_lists_waiting_cards(self):
 		self.ask("Delete", [self.todo().name])
 		self.assertEqual([card["action"] for card in get_chat(self.chat.name)["actions"]], ["Delete"])
+
+
+class TestProgressLines(IntegrationTestCase):
+	def test_lines_name_the_work_but_not_the_values(self):
+		args = json.dumps({"doctype": "Customer", "group_by": "customer_group", "filters": [["secret", "=", "x"]]})
+		self.assertEqual(harness_status("count_documents", args), "Counting Customer by customer_group")
+		self.assertEqual(harness_status("list_documents", args), "Checking data: Customer")
+		self.assertNotIn("secret", harness_status("list_documents", args))
+
+	def test_each_tool_has_a_line_and_unknown_ones_none(self):
+		args = json.dumps({"doctype": "ToDo", "action": "Delete", "report_name": "Accounts Receivable", "name": "T1"})
+		for tool in ("describe_doctype", "get_document", "run_report", "preview_document", "save_draft", "open_prefilled_form", "ask_user_to_approve"):
+			self.assertTrue(harness_status(tool, args), tool)
+		self.assertEqual(harness_status("ask_user_to_approve", args), "Asking you to approve: Delete ToDo")
+		self.assertIsNone(harness_status("something_else", args))
+		self.assertIsNone(harness_status("list_documents", "not json"))
