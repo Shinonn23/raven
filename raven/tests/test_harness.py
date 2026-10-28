@@ -256,6 +256,12 @@ class TestHeldByTheHarness(IntegrationTestCase):
 		self.assertEqual(frappe.db.count("ToDo"), before)
 		self.assertEqual([card["action"] for card in get_chat(self.chat.name)["actions"]], ["Create"])
 
+	def test_asking_again_for_the_same_thing_makes_no_second_card(self):
+		for _attempt in range(2):
+			self.call("create_document", doctype="ToDo", values={"description": "Once"})
+		self.call("create_document", doctype="ToDo", values={"description": "Different"})
+		self.assertEqual(len(get_chat(self.chat.name)["actions"]), 2)
+
 	def test_an_invalid_new_document_gets_no_card_and_the_problem_goes_back_to_the_ai(self):
 		result = json.loads(self.call("create_document", doctype="ToDo", values={"description": "x", "reference_type": "No Such DocType", "reference_name": "y"}))
 		self.assertTrue(result["problems"])

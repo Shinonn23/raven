@@ -12,7 +12,11 @@ from raven.ai.harness.data_tools import answer
 from raven.ai.harness.document_drafts import DocumentDraft
 
 PERMISSION_FOR = {"Create": "create", "Update": "write", "Submit": "submit", "Cancel": "cancel", "Delete": "delete"}
-WAITING = {"done": False, "status": "waiting for the user's decision"}
+WAITING = {
+	"done": False,
+	"status": "waiting for the user's decision",
+	"next": "Nothing more can be done until they decide. Do not ask again.",
+}
 
 
 def display(field, value) -> str:
@@ -45,17 +49,16 @@ def request_approval(chat: str | None, action: str, doctype: str, names: list[st
 			frappe.throw(f"Give between 1 and {MAX_DOCUMENTS} documents.")
 		for name in names:
 			frappe.has_permission(doctype, PERMISSION_FOR[action], doc=frappe.get_doc(doctype, name), throw=True)
-	frappe.get_doc(
-		{
-			"doctype": "Raven AI Pending Action",
-			"chat": chat,
-			"action": action,
-			"reference_doctype": doctype,
-			"names": json.dumps(names),
-			"values": json.dumps(values or {}, ensure_ascii=False),
-			"summary": summarize(doctype, values),
-		}
-	).insert()
+	request = {
+		"chat": chat,
+		"action": action,
+		"reference_doctype": doctype,
+		"names": json.dumps(names),
+		"values": json.dumps(values or {}, ensure_ascii=False),
+	}
+	# Asking again for what is already waiting (the AI may retry when it sees "not done") must not make a second card.
+	if not frappe.db.exists("Raven AI Pending Action", {**request, "status": "Pending"}):
+		frappe.get_doc({"doctype": "Raven AI Pending Action", **request, "summary": summarize(doctype, values)}).insert()
 	return WAITING
 
 
