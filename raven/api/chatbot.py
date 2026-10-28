@@ -36,7 +36,7 @@ def _actions(chat: str) -> list[dict]:
 	return frappe.get_list(
 		"Raven AI Pending Action",
 		filters={"chat": chat},
-		fields=["name", "action", "reference_doctype", "names", "values", "summary", "status", "result", "creation"],
+		fields=["name", "action", "reference_doctype", "names", "values", "summary", "status", "result", "message_position"],
 		order_by="creation asc",
 	)
 

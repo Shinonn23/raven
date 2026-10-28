@@ -93,12 +93,12 @@ const MessageRow = ({ message }: { message: ChatbotMessage }) => {
     return isMine ? <OwnMessage message={message} /> : <OtherPersonMessage message={message} />
 }
 
-/** The card belongs under the answer the AI gave when it asked; -1 while that answer is still being written. */
-const cardIndex = (action: ChatbotAction, messages: ChatbotMessage[]) =>
-    messages.findIndex((message) => message.role === "assistant" && (message.creation ?? "") >= action.creation)
+/** A card belongs under the answer that followed the messages the chat had when it was asked; a position past the last message
+ *  (the answer is still being written) puts it at the end. */
+const cardPosition = (action: ChatbotAction, messages: ChatbotMessage[]) => Math.min(action.message_position, messages.length)
 
 const cardsAfter = (index: number, messages: ChatbotMessage[], actions: ChatbotAction[]) =>
-    actions.filter((action) => cardIndex(action, messages) === index)
+    actions.filter((action) => cardPosition(action, messages) === index)
 
 interface ChatbotMessagesProps {
     messages: ChatbotMessage[]
@@ -131,7 +131,7 @@ export const ChatbotMessages = ({ messages, actions = [], chatId, pendingText, s
                     {chatId && cardsAfter(index, messages, actions).map((action) => <ChatbotActionCard key={action.name} chatId={chatId} action={action} />)}
                 </Fragment>
             ))}
-            {chatId && actions.filter((action) => cardIndex(action, messages) === -1).map((action) => <ChatbotActionCard key={action.name} chatId={chatId} action={action} />)}
+            {chatId && cardsAfter(messages.length, messages, actions).map((action) => <ChatbotActionCard key={action.name} chatId={chatId} action={action} />)}
             {pendingText && <MessageRow message={{ role: "user", content: pendingText, creation: new Date().toISOString() }} />}
             {streamingText ? <MessageRow message={{ role: "assistant", content: streamingText, creation: new Date().toISOString() }} /> : null}
             {(pendingText || streamingText !== null) && <div className="flex items-center gap-3 px-4 py-2 pl-[3.75rem] text-p-sm text-ink-gray-5"><Spinner className="size-4" />{status ?? _("Thinking…")}</div>}

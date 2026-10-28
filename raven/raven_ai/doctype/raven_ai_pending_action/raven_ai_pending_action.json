@@ -12,6 +12,7 @@
  "in_create": 1,
  "field_order": [
   "chat",
+  "message_position",
   "action",
   "reference_doctype",
   "names",
@@ -28,6 +29,13 @@
    "options": "Raven Chatbot Chat",
    "search_index": 1,
    "read_only": 1
+  },
+  {
+   "fieldname": "message_position",
+   "fieldtype": "Int",
+   "label": "Message Position",
+   "read_only": 1,
+   "description": "How many messages the chat had when this was asked: the card belongs under the answer at that position."
   },
   {
    "fieldname": "action",

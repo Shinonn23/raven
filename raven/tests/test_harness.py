@@ -187,6 +187,13 @@ class TestDocuments(IntegrationTestCase):
 		self.ask("Delete", [self.todo().name])
 		self.assertEqual([card["action"] for card in get_chat(self.chat.name)["actions"]], ["Delete"])
 
+	def test_a_card_knows_which_answer_it_belongs_under(self):
+		self.chat.append("messages", {"role": "user", "content": "one"})
+		self.chat.append("messages", {"role": "assistant", "content": "answer"})
+		self.chat.save()
+		self.ask("Delete", [self.todo().name])
+		self.assertEqual(get_chat(self.chat.name)["actions"][0]["message_position"], 2)
+
 	def test_answered_cards_stay_with_their_outcome(self):
 		approved, rejected = self.ask("Delete", [self.todo().name]), self.ask("Delete", [self.todo().name])
 		approved.decide(True)

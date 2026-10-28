@@ -39,6 +39,15 @@ def summarize(doctype: str, values: dict | None) -> str:
 	return "\n".join(lines)
 
 
+def message_count(chat: str | None) -> int:
+	"""How many messages the chat has: the card goes under the answer that follows them."""
+	if not chat:
+		return 0
+	document = frappe.get_doc("Raven Chatbot Chat", chat)
+	document.check_permission("read")
+	return len(document.messages)
+
+
 def request_approval(chat: str | None, action: str, doctype: str, names: list[str] | None = None, values: dict | None = None) -> dict:
 	"""Hold the change for the user. It must be allowed for them now, and a new document must pass the checks of saving."""
 	names = names or []
@@ -54,6 +63,7 @@ def request_approval(chat: str | None, action: str, doctype: str, names: list[st
 			frappe.has_permission(doctype, PERMISSION_FOR[action], doc=frappe.get_doc(doctype, name), throw=True)
 	request = {
 		"chat": chat,
+		"message_position": message_count(chat),
 		"action": action,
 		"reference_doctype": doctype,
 		"names": json.dumps(names),
