@@ -358,7 +358,7 @@ class TestChatbotQuestions(TestChatbot):
 			chat = send_message("x")["name"]
 		many = [{"question": f" Q{n} ", "options": [" A ", "", {"label": " "}, "B", "C", "D", "E", "F", "G"]} for n in range(6)] + [{"question": "  "}]
 		stored = json.loads(self.asked(chat, many)[0]["questions"])
-		self.assertEqual(len(stored), 4)
+		self.assertEqual(len(stored), 3)
 		self.assertEqual((stored[0]["question"], [option["label"] for option in stored[0]["options"]]), ("Q0", ["A", "B", "C", "D", "E", "F"]))
 
 	def test_a_long_preview_is_cut(self):
@@ -384,16 +384,51 @@ class TestChatbotQuestions(TestChatbot):
 		saved = get_chat(chat)["questions"][0]
 		self.assertEqual((saved["status"], json.loads(saved["answers"])), ("Answered", ["Assigned To", "a, b"]))
 
-	def test_every_question_needs_an_answer_once_and_only_from_its_owner(self):
+	def test_a_question_is_answered_once_and_only_from_its_owner(self):
 		with bot_answers():
 			chat = send_message("x")["name"]
 			question = self.asked(chat)[0]["name"]
 			self.assertRaises(frappe.ValidationError, answer_question, question, ["only one"])
-			self.assertRaises(frappe.ValidationError, answer_question, question, ["A", "  "])
+			self.assertRaises(frappe.ValidationError, answer_question, question, ["  ", "  "])
 			answer_question(question, ["A", "my own words"])
 			self.assertRaises(frappe.ValidationError, answer_question, question, ["A", "again"])
 		frappe.set_user(STRANGER)
 		self.assertRaises(frappe.PermissionError, answer_question, question, ["A", "B"])
+
+	def test_some_questions_may_be_left_unanswered(self):
+		with bot_answers():
+			chat = send_message("x")["name"]
+			question = self.asked(chat)[0]["name"]
+			result = answer_question(question, ["Owner", ""])
+		self.assertEqual([m["content"] for m in result["messages"] if m["role"] == "user"][-1], "- Which field?: Owner\n- Which tags?: (not answered)")
+
+	def test_only_the_first_question_of_a_turn_is_shown(self):
+		with bot_answers():
+			chat = send_message("x")["name"]
+		self.asked(chat)
+		cards = self.asked(chat, [{"question": "Which employee?"}])
+		self.assertEqual(len(cards), 1)
+		self.assertIn("Which field?", cards[0]["questions"])
+
+	def test_the_same_question_asked_again_stays_one_card(self):
+		with bot_answers():
+			chat = send_message("x")["name"]
+		self.asked(chat)
+		self.asked(chat)
+		self.assertEqual([q["status"] for q in get_chat(chat)["questions"]], ["Pending"])
+
+	def test_typing_in_the_chat_closes_the_waiting_question(self):
+		with bot_answers():
+			chat = send_message("x")["name"]
+			self.asked(chat)
+			send_message("on 25 Oct, taxi to the customer, 15,750", chat=chat)
+		self.assertEqual([q["status"] for q in get_chat(chat)["questions"]], ["Skipped"])
+
+	def test_a_choice_that_only_says_to_type_is_not_a_choice(self):
+		with bot_answers():
+			chat = send_message("x")["name"]
+		stored = json.loads(self.asked(chat, [{"question": "Which type?", "options": ["ระบุ Expense Type", "Specify the type", "Travel", "Meals"]}])[0]["questions"])
+		self.assertEqual([option["label"] for option in stored[0]["options"]], ["Travel", "Meals"])
 
 
 class TestChatbotSharing(TestChatbot):

@@ -1,7 +1,10 @@
 export type AskedOption = { label: string; description?: string; preview?: string }
 export type AskedQuestion = { question: string; options: AskedOption[]; multiple?: boolean }
 
-/** The choices are laid out as a list with a preview beside it when any of them has a preview or a description. */
+/** The preview pane exists only when some choice has a preview to show in it. */
+export const hasPreview = (question: AskedQuestion): boolean => question.options.some((option) => option.preview)
+
+/** Choices with a description or preview are listed one per line; plain ones are chips. */
 export const hasDetails = (question: AskedQuestion): boolean => question.options.some((option) => option.preview || option.description)
 
 /** What the user has picked or typed for each question so far. */
@@ -24,5 +27,12 @@ export const type = (draft: Draft, typed: string, multiple: boolean): Draft => (
 
 export const allAnswers = (questions: AskedQuestion[], drafts: Draft[]): string[] => questions.map((_, index) => answerOf(drafts[index] ?? emptyDraft))
 
-/** Every question has an answer, so the user may send. */
-export const isComplete = (questions: AskedQuestion[], drafts: Draft[]): boolean => allAnswers(questions, drafts).every(Boolean)
+/** The user may send as soon as one question has an answer; the others are sent as not answered. */
+export const hasAnyAnswer = (questions: AskedQuestion[], drafts: Draft[]): boolean => allAnswers(questions, drafts).some(Boolean)
+
+/** The question to go to after `from`: the next one still without an answer, else simply the next, else stay. */
+export const nextToAnswer = (questions: AskedQuestion[], drafts: Draft[], from: number): number => {
+    const answers = allAnswers(questions, drafts)
+    const unanswered = answers.findIndex((answer, index) => index > from && !answer)
+    return unanswered !== -1 ? unanswered : Math.min(from + 1, questions.length - 1)
+}

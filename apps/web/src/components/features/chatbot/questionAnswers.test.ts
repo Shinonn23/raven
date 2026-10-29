@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { allAnswers, answerOf, emptyDraft, hasDetails, isComplete, togglePick, type } from "./questionAnswers"
+import { allAnswers, answerOf, emptyDraft, hasAnyAnswer, hasDetails, hasPreview, nextToAnswer, togglePick, type } from "./questionAnswers"
 
 describe("questionAnswers", () => {
     it("keeps one pick for a single-choice question, and picking it again drops it", () => {
@@ -20,12 +20,25 @@ describe("questionAnswers", () => {
         expect(togglePick(type(emptyDraft, "typed", false), "A", false)).toEqual({ picked: ["A"], typed: "" })
     })
 
-    it("is complete only when every question has an answer", () => {
+    it("lets the user send once any question has an answer", () => {
         const questions = [{ question: "One?", options: [{ label: "A" }] }, { question: "Two?", options: [] }]
-        expect(isComplete(questions, [togglePick(emptyDraft, "A", false)])).toBe(false)
-        const drafts = [togglePick(emptyDraft, "A", false), type(emptyDraft, "text", false)]
-        expect(isComplete(questions, drafts)).toBe(true)
-        expect(allAnswers(questions, drafts)).toEqual(["A", "text"])
+        expect(hasAnyAnswer(questions, [])).toBe(false)
+        expect(hasAnyAnswer(questions, [emptyDraft, type(emptyDraft, "text", false)])).toBe(true)
+        expect(allAnswers(questions, [togglePick(emptyDraft, "A", false)])).toEqual(["A", ""])
+    })
+
+    it("goes to the next question still without an answer", () => {
+        const questions = ["a", "b", "c"].map((question) => ({ question, options: [] }))
+        const answered = type(emptyDraft, "x", false)
+        expect(nextToAnswer(questions, [emptyDraft, emptyDraft, emptyDraft], 0)).toBe(1)
+        expect(nextToAnswer(questions, [emptyDraft, answered, emptyDraft], 0)).toBe(2)
+        expect(nextToAnswer(questions, [emptyDraft, answered, answered], 0)).toBe(1)
+        expect(nextToAnswer(questions, [emptyDraft, emptyDraft, emptyDraft], 2)).toBe(2)
+    })
+
+    it("has a preview pane only when a choice has a preview", () => {
+        expect(hasPreview({ question: "?", options: [{ label: "A", description: "only a description" }] })).toBe(false)
+        expect(hasPreview({ question: "?", options: [{ label: "A", preview: "**A**" }] })).toBe(true)
     })
 
     it("shows a preview layout only for questions whose choices have details", () => {

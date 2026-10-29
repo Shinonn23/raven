@@ -7,6 +7,7 @@ from raven.ai.chat_title import placeholder, title_for
 from raven.ai.chatbot_context import build_prompt, image_inputs, validate_attachments
 from raven.ai.chatbot_models import ChatbotChoice, resolve_choice
 from raven.ai.chatbot_stream import DeltaPublisher, stream_reply
+from raven.raven_ai.doctype.raven_ai_question.raven_ai_question import RavenAIQuestion
 from raven.raven_ai.doctype.raven_chatbot_document_usage.raven_chatbot_document_usage import (
 	RavenChatbotDocumentUsage,
 )
@@ -47,6 +48,8 @@ class RavenChatbotChat(Document):
 				"link_document": document and document["docname"],
 			},
 		)
+		if not self.is_new():
+			RavenAIQuestion.skip_open(self.name)
 		is_first_message = not self.title
 		if is_first_message:
 			self.title = placeholder()
