@@ -33,14 +33,29 @@ def clean_option(option) -> dict | None:
 	return {"label": label, **{key: value for key, value in extras.items() if value}}
 
 
+def records_as_options(doctype: str) -> tuple[list[dict], str | None]:
+	"""When the answer is a record of the system: a short list of the ones this user may read becomes the choices; a long one is left to a
+	search box in the card (the `link_to` that is kept). Raises if the user may not read the DocType."""
+	frappe.has_permission(doctype, "read", throw=True)
+	title = frappe.get_meta(doctype).title_field
+	fields = ["name", title] if title and title != "name" else ["name"]
+	records = frappe.get_list(doctype, fields=fields, limit_page_length=MAX_OPTIONS + 1)
+	if len(records) > MAX_OPTIONS:
+		return [], doctype
+	return [clean_option({"label": record.name, "description": record.get(title) if title != "name" else ""}) for record in records], None
+
+
 def clean(questions: list[dict]) -> list[dict]:
 	"""Each question with its short choices; a question without text is dropped."""
 	cleaned = []
 	for item in questions[:MAX_QUESTIONS]:
 		text = str(item.get("question", "")).strip()
 		options = [option for option in map(clean_option, item.get("options") or []) if option][:MAX_OPTIONS]
+		link_to = str(item.get("link_to") or "").strip()
+		if link_to and not options:
+			options, link_to = records_as_options(link_to)
 		if text:
-			cleaned.append({"question": text, "options": options, "multiple": bool(item.get("multiple"))})
+			cleaned.append({"question": text, "options": options, "multiple": bool(item.get("multiple")), **({"link_to": link_to} if link_to else {})})
 	return cleaned
 
 
@@ -68,7 +83,9 @@ def question_tool(chat: str | None) -> FunctionTool:
 			f"pick (2 to {MAX_OPTIONS}); for an open question (a name, a date, an amount) give NO options and the user types the answer. Never make "
 			"a choice that only says to type something. `multiple`: true if several may be picked. A choice is a short label, or "
 			"{label, description, preview}: `preview` is a short Markdown text shown beside the choice, only when seeing what it would produce "
-			"helps. The user can always answer in their own words instead. If something unreadable is the problem (a blurry picture), ask first "
+			"helps. When the answer is a record that exists in the system (an Employee, an Expense Claim Type, a Customer), give `link_to` "
+			"with its DocType and no options: the user then picks from the real list, so never ask them to type a name you could look up. "
+			"The user can always answer in their own words instead. If something unreadable is the problem (a blurry picture), ask first "
 			"whether they can send it again."
 		),
 	)

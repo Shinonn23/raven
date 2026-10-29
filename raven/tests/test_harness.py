@@ -31,7 +31,7 @@ class TestHarness(IntegrationTestCase):
 	def test_tool_names(self):
 		self.assertEqual(
 			[tool.name for tool in data_tools()],
-			["describe_doctype", "list_documents", "count_documents", "get_document", "run_report"],
+			["describe_doctype", "find_link_values", "list_documents", "count_documents", "get_document", "run_report"],
 		)
 
 	def test_a_failure_comes_back_as_an_error(self):
@@ -51,6 +51,41 @@ class TestHarness(IntegrationTestCase):
 
 		with self.assertRaises(frappe.PermissionError):
 			DataReader().describe("System Settings")
+
+	def test_a_select_field_shows_its_choices_and_a_link_field_shows_where_it_points_with_examples(self):
+		from raven.ai.harness.data_reader import DataReader
+
+		frappe.set_user("Administrator")
+		fields = {field["name"]: field for field in DataReader().describe("ToDo")["fields"]}
+		self.assertEqual(fields["priority"]["choices"], ["High", "Medium", "Low"])
+		self.assertNotIn("options", fields["priority"])
+		self.assertEqual(fields["allocated_to"]["link_to"], "User")
+		self.assertTrue(fields["allocated_to"]["examples"])
+		self.assertTrue(fields["allocated_to"]["more"])
+
+	def test_a_field_the_system_fills_in_is_marked_with_where_it_comes_from(self):
+		from raven.ai.harness.data_reader import DataReader
+
+		frappe.set_user("Administrator")
+		fields = {field["name"]: field for field in DataReader().describe("Expense Claim")["fields"]}
+		self.assertTrue(fields["employee_name"]["fetched_from"].startswith("employee."))
+		self.assertNotIn("fetched_from", fields["employee"])
+		self.assertEqual(fields["posting_date"]["default"], "Today")
+
+	def test_link_values_are_searched_as_the_forms_dropdown_does(self):
+		from raven.ai.harness.data_reader import DataReader
+
+		frappe.set_user("Administrator")
+		found = DataReader().find_link_values("ToDo", "allocated_to", "Administr")
+		self.assertIn("Administrator", [row["value"] for row in found])
+		with self.assertRaises(frappe.ValidationError):
+			DataReader().find_link_values("ToDo", "description", "x")
+
+	def test_a_linked_doctype_the_user_cannot_read_gives_no_examples(self):
+		from raven.ai.harness.data_reader import DataReader
+
+		self.assertEqual(DataReader().example_records("Error Log"), {"readable": False})
+		self.assertEqual(DataReader().example_records("System Settings"), {})
 
 	def test_count_and_list_use_the_users_permissions(self):
 		from raven.ai.harness.data_reader import DataReader

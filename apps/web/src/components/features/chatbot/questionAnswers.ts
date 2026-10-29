@@ -1,5 +1,6 @@
 export type AskedOption = { label: string; description?: string; preview?: string }
-export type AskedQuestion = { question: string; options: AskedOption[]; multiple?: boolean }
+/** `link_to` is a DocType whose records are the answer: the card shows the form's own searchable dropdown for it. */
+export type AskedQuestion = { question: string; options: AskedOption[]; multiple?: boolean; link_to?: string }
 
 /** The preview pane exists only when some choice has a preview to show in it. */
 export const hasPreview = (question: AskedQuestion): boolean => question.options.some((option) => option.preview)

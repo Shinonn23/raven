@@ -424,6 +424,36 @@ class TestChatbotQuestions(TestChatbot):
 			send_message("on 25 Oct, taxi to the customer, 15,750", chat=chat)
 		self.assertEqual([q["status"] for q in get_chat(chat)["questions"]], ["Skipped"])
 
+	@staticmethod
+	def records_of_claim_types(records):
+		"""frappe.get_list that answers for Expense Claim Type with these records and is real for everything else."""
+		real = frappe.get_list
+		return patch("frappe.get_list", side_effect=lambda doctype, *args, **kwargs: records if doctype == "Expense Claim Type" else real(doctype, *args, **kwargs))
+
+	def test_a_short_list_of_records_becomes_the_choices(self):
+		with bot_answers():
+			chat = send_message("x")["name"]
+		few = [frappe._dict(name="Food"), frappe._dict(name="Travel")]
+		frappe.set_user("Administrator")
+		with self.records_of_claim_types(few):
+			stored = json.loads(self.asked(chat, [{"question": "Which type?", "link_to": "Expense Claim Type"}])[0]["questions"])
+		self.assertEqual(([option["label"] for option in stored[0]["options"]], "link_to" in stored[0]), (["Food", "Travel"], False))
+
+	def test_a_long_list_of_records_keeps_a_search_box(self):
+		with bot_answers():
+			chat = send_message("x")["name"]
+		many = [frappe._dict(name=f"Type {n}") for n in range(7)]
+		frappe.set_user("Administrator")
+		with self.records_of_claim_types(many):
+			stored = json.loads(self.asked(chat, [{"question": "Which type?", "link_to": "Expense Claim Type"}])[0]["questions"])
+		self.assertEqual((stored[0]["options"], stored[0]["link_to"]), ([], "Expense Claim Type"))
+
+	def test_a_user_who_cannot_read_the_records_cannot_ask_for_them(self):
+		with bot_answers():
+			chat = send_message("x")["name"]
+		frappe.set_user(OWNER)
+		self.assertRaises(frappe.PermissionError, self.asked, chat, [{"question": "Which?", "link_to": "System Settings"}])
+
 	def test_a_choice_that_only_says_to_type_is_not_a_choice(self):
 		with bot_answers():
 			chat = send_message("x")["name"]

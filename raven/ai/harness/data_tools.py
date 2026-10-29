@@ -30,10 +30,24 @@ def data_tools(reader: DataReader | None = None) -> list[FunctionTool]:
 	@function_tool(
 		strict_mode=False,
 		name_override="describe_doctype",
-		description_override="The fields of a DocType (name, label, type, options, required) the user may read. Use it before filtering or choosing fields.",
+		description_override=(
+			"The fields of a DocType the user may read: name, label, type, required. A Select field lists its `choices`; a Link field names "
+			"the DocType it points to (`link_to`) with some of its records (`examples`). Use it before filtering, choosing fields or filling a document."
+		),
 	)
 	def describe_doctype(doctype: str) -> str:
 		return answer(lambda: reader.describe(doctype))
+
+	@function_tool(
+		strict_mode=False,
+		name_override="find_link_values",
+		description_override=(
+			"Search the values a Link field of a DocType accepts (an employee, a type, a customer...), as the form's own dropdown does: "
+			"`doctype` is the document you are filling, `fieldname` its Link field, `text` what to look for (empty for the first ones)."
+		),
+	)
+	def find_link_values(doctype: str, fieldname: str, text: str = "") -> str:
+		return answer(lambda: reader.find_link_values(doctype, fieldname, text))
 
 	@function_tool(
 		strict_mode=False,
@@ -76,4 +90,4 @@ def data_tools(reader: DataReader | None = None) -> list[FunctionTool]:
 	def run_report(report_name: str, filters: dict | None = None) -> str:
 		return answer(lambda: reader.report(report_name, filters))
 
-	return [describe_doctype, list_documents, count_documents, get_document, run_report]
+	return [describe_doctype, find_link_values, list_documents, count_documents, get_document, run_report]

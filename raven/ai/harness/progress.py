@@ -15,6 +15,7 @@ def harness_status(tool_name: str, arguments: str) -> str | None:
 	doctype = args.get("doctype", "")
 	lines = {
 		"describe_doctype": lambda: _("Looking at the fields of {0}").format(doctype),
+		"find_link_values": lambda: _("Looking up {0} · {1}").format(doctype, args.get("fieldname", "")),
 		"list_documents": lambda: _("Checking data: {0}").format(doctype),
 		"count_documents": lambda: _("Counting {0} by {1}").format(doctype, args["group_by"]) if args.get("group_by") else _("Counting {0}").format(doctype),
 		"get_document": lambda: _("Reading {0} {1}").format(doctype, args.get("name", "")),

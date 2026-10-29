@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { MessageCircleQuestionIcon } from "lucide-react"
+import LinkFieldCombobox from "@components/common/LinkFieldComboBox/LinkFieldCombobox"
 import { Button } from "@components/ui/button"
 import { Input } from "@components/ui/input"
 import MarkdownRenderer from "@components/ui/markdown"
@@ -51,6 +52,10 @@ export const ChatbotQuestionItem = ({ item, draft, onChange, onPicked, busy }: C
     const other = item.options.length > 0 && (
         <Button size="sm" variant={otherOpen ? "solid" : "outline"} aria-pressed={otherOpen} disabled={busy} onClick={toggleOther}>{_("Other…")}</Button>
     )
+
+    if (item.link_to) {
+        return <LinkFieldCombobox doctype={item.link_to} value={draft.typed} disabled={busy} hideCreate clearable onChange={(value) => onChange((current) => type(current, value, false))} />
+    }
 
     return (
         <>
