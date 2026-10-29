@@ -252,15 +252,22 @@ class TestHeldByTheHarness(IntegrationTestCase):
 			self.assertIn("approval", json.loads(self.call(name, **arguments))["state"])
 		self.assertEqual(frappe.db.get_value("ToDo", self.todo.name, "priority"), "Medium")
 		cards = get_chat(self.chat.name)["actions"]
-		self.assertEqual([(card["action"], card["summary"]) for card in cards], [("Delete", ""), ("Update", "Priority: High")])
+		self.assertEqual([(card["action"], json.loads(card["details"])) for card in cards], [("Delete", []), ("Update", [{"label": "Priority", "value": "High"}])])
 
 	def test_the_card_text_comes_from_the_real_values(self):
 		self.call("update_documents", doctype="ToDo", names=[self.todo.name], values={"priority": "High", "owner": "x@example.com"})
-		self.assertEqual(get_chat(self.chat.name)["actions"][0]["summary"], "Priority: High")
+		self.assertEqual(json.loads(get_chat(self.chat.name)["actions"][0]["details"]), [{"label": "Priority", "value": "High"}])
+
+	def test_dates_and_options_are_shown_as_the_form_shows_them(self):
+		self.call("update_documents", doctype="ToDo", names=[self.todo.name], values={"date": "2026-11-04", "status": "Closed"})
+		rows = {row["label"]: row["value"] for row in json.loads(get_chat(self.chat.name)["actions"][0]["details"])}
+		self.assertEqual(rows["Status"], "Closed")
+		self.assertEqual(rows["Due Date"], frappe.utils.formatdate("2026-11-04"))
+		self.assertNotEqual(rows["Due Date"], "2026-11-04") if frappe.utils.formatdate("2026-11-04") != "2026-11-04" else None
 
 	def test_people_are_shown_by_name(self):
 		self.call("update_documents", doctype="ToDo", names=[self.todo.name], values={"allocated_to": "Administrator"})
-		self.assertEqual(get_chat(self.chat.name)["actions"][0]["summary"], f"Allocated To: {frappe.utils.get_fullname('Administrator')}")
+		self.assertEqual(json.loads(get_chat(self.chat.name)["actions"][0]["details"]), [{"label": "Allocated To", "value": frappe.utils.get_fullname("Administrator")}])
 
 	def test_create_checks_first_and_only_makes_a_card(self):
 		before = frappe.db.count("ToDo")
@@ -280,7 +287,7 @@ class TestHeldByTheHarness(IntegrationTestCase):
 		self.call("assign_documents", doctype="ToDo", names=[self.todo.name], users=users)
 		card = frappe.get_last_doc("Raven AI Pending Action")
 		self.assertEqual(frappe.db.count("ToDo", {"reference_type": "ToDo", "reference_name": self.todo.name}), 0)
-		self.assertIn(frappe.utils.get_fullname(second.name), card.summary)
+		self.assertIn(frappe.utils.get_fullname(second.name), card.details)
 		card.decide(True)
 		assigned = frappe.get_all("ToDo", filters={"reference_type": "ToDo", "reference_name": self.todo.name}, pluck="allocated_to")
 		self.assertCountEqual(assigned, users)
@@ -292,7 +299,7 @@ class TestHeldByTheHarness(IntegrationTestCase):
 
 	def test_tags_are_held_then_added(self):
 		self.call("tag_documents", doctype="ToDo", names=[self.todo.name], tags=["urgent", "meeting"])
-		self.assertEqual(frappe.get_last_doc("Raven AI Pending Action").summary, "Tags: urgent, meeting")
+		self.assertEqual(json.loads(frappe.get_last_doc("Raven AI Pending Action").details), [{"label": "Tags", "value": "urgent, meeting"}])
 		self.assertFalse(frappe.db.get_value("ToDo", self.todo.name, "_user_tags"))
 		self.approve_last_card()
 		self.assertCountEqual(filter(None, frappe.db.get_value("ToDo", self.todo.name, "_user_tags").split(",")), ["urgent", "meeting"])
@@ -301,14 +308,14 @@ class TestHeldByTheHarness(IntegrationTestCase):
 		other = frappe.get_doc({"doctype": "User", "email": "share.target@example.com", "first_name": "Share", "send_welcome_email": 0}).insert()
 		self.call("share_documents", doctype="ToDo", names=[self.todo.name], users=[other.name], can_edit=True)
 		self.assertFalse(frappe.db.exists("DocShare", {"user": other.name, "share_name": self.todo.name}))
-		self.assertIn("(can edit)", frappe.get_last_doc("Raven AI Pending Action").summary)
+		self.assertIn({"label": "Can edit", "value": "Yes"}, json.loads(frappe.get_last_doc("Raven AI Pending Action").details))
 		self.approve_last_card()
 		self.assertEqual(frappe.db.get_value("DocShare", {"user": other.name, "share_name": self.todo.name}, ["read", "write"]), (1, 1))
 
 	def test_a_file_is_attached_only_after_approval_and_only_if_the_user_may_read_it(self):
 		file = frappe.get_doc({"doctype": "File", "file_name": "plan.txt", "content": "plan", "is_private": 1}).insert()
 		self.call("attach_file", doctype="ToDo", name=self.todo.name, file_url=file.file_url)
-		self.assertEqual(frappe.get_last_doc("Raven AI Pending Action").summary, "Attach: plan.txt")
+		self.assertEqual(json.loads(frappe.get_last_doc("Raven AI Pending Action").details), [{"label": "Attach", "value": "plan.txt"}])
 		self.assertFalse(frappe.db.exists("File", {"attached_to_doctype": "ToDo", "attached_to_name": self.todo.name}))
 		self.approve_last_card()
 		self.assertTrue(frappe.db.exists("File", {"attached_to_doctype": "ToDo", "attached_to_name": self.todo.name, "file_name": "plan.txt"}))

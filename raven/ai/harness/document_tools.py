@@ -6,6 +6,8 @@ import json
 import frappe
 from agents import FunctionTool, function_tool
 from frappe import _
+from frappe.utils import strip_html
+from frappe.utils.formatters import format_value
 
 from raven.ai.harness.approved_actions import MAX_DOCUMENTS, editable
 from raven.ai.harness.data_tools import answer
@@ -24,36 +26,45 @@ WAITING = {
 
 
 def display(field, value) -> str:
-	"""A value as the user knows it: people by name."""
-	if field and field.fieldtype == "Link" and field.options == "User":
+	"""A value as the user knows it: people by name, dates, numbers and options as the document form shows them."""
+	if field is None:
+		return str(value)
+	if field.fieldtype == "Link" and field.options == "User":
 		return frappe.utils.get_fullname(value)
-	return str(value)
+	if field.fieldtype == "Select":
+		return _(str(value))
+	return strip_html(str(format_value(value, field)))
 
 
-def summarize_sidebar_action(values: dict) -> str:
-	"""The card text of Assign, Tag, Share and Attach, which carry users, tags or a file rather than field values."""
-	people = lambda users: ", ".join(frappe.utils.get_fullname(user) for user in users)  # noqa: E731
+def people(users: list[str]) -> str:
+	return ", ".join(frappe.utils.get_fullname(user) for user in users)
+
+
+def sidebar_details(values: dict) -> list[dict]:
+	"""The card rows of Assign, Tag, Share and Attach, which carry users, tags or a file rather than field values."""
+	file_name = lambda **filters: frappe.db.get_value("File", filters, "file_name")  # noqa: E731
 	if "assign_to" in values:
-		return _("Assign to: {0}").format(people(values["assign_to"]))
+		return [{"label": _("Assign to"), "value": people(values["assign_to"])}]
 	if "tags" in values:
-		return _("Tags: {0}").format(", ".join(values["tags"]))
+		return [{"label": _("Tags"), "value": ", ".join(values["tags"])}]
 	if "share_with" in values:
-		return _("Share with: {0}").format(people(values["share_with"])) + (_(" (can edit)") if values.get("can_edit") else "")
+		rows = [{"label": _("Share with"), "value": people(values["share_with"])}]
+		return rows + [{"label": _("Can edit"), "value": _("Yes")}] if values.get("can_edit") else rows
 	if "detach" in values:
-		return _("Remove attachment: {0}").format(", ".join(frappe.db.get_value("File", file, "file_name") or file for file in values["detach"]))
+		return [{"label": _("Remove attachment"), "value": ", ".join(file_name(name=file) or file for file in values["detach"])}]
 	if "file_url" in values:
-		return _("Attach: {0}").format(frappe.db.get_value("File", {"file_url": values["file_url"]}, "file_name") or values["file_url"])
-	return ""
+		return [{"label": _("Attach"), "value": file_name(file_url=values["file_url"]) or values["file_url"]}]
+	return []
 
 
-def summarize(doctype: str, values: dict | None) -> str:
-	"""What the card shows the user: each field by its label with the value, written by the system from the real values."""
+def field_details(doctype: str, values: dict | None) -> list[dict]:
+	"""Each field by its label with the value as the form shows it, written by the system from the real values."""
 	meta = frappe.get_meta(doctype)
-	lines = []
+	rows = []
 	for fieldname, value in editable(values or {}).items():
 		field = meta.get_field(fieldname)
-		lines.append(f"{_(field.label) if field and field.label else fieldname}: {display(field, value)}")
-	return "\n".join(lines)
+		rows.append({"label": _(field.label) if field and field.label else fieldname, "value": display(field, value)})
+	return rows
 
 
 def message_count(chat: str | None) -> int:
@@ -102,7 +113,8 @@ def request_approval(chat: str | None, action: str, doctype: str, names: list[st
 	}
 	# Asking again for what is already waiting (the AI may retry when it sees "not done") must not make a second card.
 	if not frappe.db.exists("Raven AI Pending Action", {**request, "status": "Pending"}):
-		frappe.get_doc({"doctype": "Raven AI Pending Action", **request, "summary": summarize_sidebar_action(values or {}) if action in SIDEBAR_ACTIONS else summarize(doctype, values)}).insert()
+		rows = sidebar_details(values or {}) if action in SIDEBAR_ACTIONS else field_details(doctype, values)
+		frappe.get_doc({"doctype": "Raven AI Pending Action", **request, "details": json.dumps(rows, ensure_ascii=False)}).insert()
 	return WAITING
 
 

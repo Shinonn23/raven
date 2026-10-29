@@ -17,7 +17,7 @@
   "reference_doctype",
   "names",
   "values",
-  "summary",
+  "details",
   "status",
   "result"
  ],
@@ -70,10 +70,12 @@
    "read_only": 1
   },
   {
-   "fieldname": "summary",
-   "fieldtype": "Small Text",
-   "label": "Summary",
-   "read_only": 1
+   "fieldname": "details",
+   "fieldtype": "Code",
+   "label": "Details",
+   "read_only": 1,
+   "options": "JSON",
+   "description": "What the card shows, as {label, value} rows written by the system."
   },
   {
    "fieldname": "status",
