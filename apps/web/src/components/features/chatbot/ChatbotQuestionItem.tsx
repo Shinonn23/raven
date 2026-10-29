@@ -16,12 +16,12 @@ interface ChatbotQuestionItemProps {
     busy: boolean
 }
 
-/** The question itself, with the mark that tells it apart from the AI's text. */
-export const QuestionHeading = ({ text, step }: { text: string; step?: string }) => (
+/** The question itself, with the mark that tells it apart from the AI's text and, beside it, whatever `children` the card puts there (the arrows). */
+export const QuestionHeading = ({ text, children }: { text: string; children?: React.ReactNode }) => (
     <div className="flex items-start gap-2 text-p-base font-medium text-ink-gray-8">
         <MessageCircleQuestionIcon className="mt-0.5 size-4 shrink-0 text-ink-blue-3" />
         <span className="flex-1 whitespace-pre-line">{text}</span>
-        {step && <span className="shrink-0 text-xs font-normal text-ink-gray-5">{step}</span>}
+        {children}
     </div>
 )
 
