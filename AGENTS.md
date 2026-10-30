@@ -1,3 +1,10 @@
+## Shared bench coordination
+
+Read `.agent/WORKFLOW.md` before delegating. `.agent` and `.codex` link to the
+shared source in the sibling `connect_diagnostics_setup` checkout, which must be
+present in this bench. Follow current user directions and this repository's
+conventions and local guidance; setup app conventions do not apply to this app.
+
 Guidelines for writing good code for a developer
 
 Choose clean code over clever code.
